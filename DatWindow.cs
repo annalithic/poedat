@@ -9,7 +9,16 @@ using System.Collections.Generic;
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
         Schema schema;
+        Dictionary<string, string> inputSchema;
+
+        List<string> datFileList;
+        int datFileSelected;
+
+        Dictionary<string, string> schemaText;
+        Dictionary<string, string> lowercaseToTitleCaseDats;
+
         Dat dat;
+
 
         string datName;
         string[] rows;
@@ -30,6 +39,16 @@ namespace ImGui.NET.SampleProgram {
         }
 
         public DatWindow(string path) {
+            datFileList = new List<string>();
+            foreach(string datPath in Directory.EnumerateFiles(@"E:\Extracted\PathOfExile\3.25.Settlers\data", "*.dat64")) {
+                datFileList.Add(Path.GetFileNameWithoutExtension(datPath));
+            }
+
+            schemaText = Schema.SplitGqlTypes(@"E:\Projects2\dat-schema\dat-schema");
+            lowercaseToTitleCaseDats = new Dictionary<string, string>();
+            foreach(string dat in schemaText.Keys) lowercaseToTitleCaseDats[dat.ToLower()] = dat;
+
+
             schema = new Schema(@"E:\Projects2\dat-schema\dat-schema");
             dat = new Dat(path);
             datName = Path.GetFileNameWithoutExtension(path);
@@ -56,21 +75,35 @@ namespace ImGui.NET.SampleProgram {
             //    rows[i] = ToHexSpaced(dat.rows[i]);
             //}
         }
+
         public unsafe void Update() {
 
-            if (BeginTable("MAIN", 2)) {
+            if (BeginTable("MAIN", 3)) {
+                TableSetupColumn("Dat Files", ImGuiTableColumnFlags.WidthFixed, 256);
+                TableSetupColumn("Data", ImGuiTableColumnFlags.WidthStretch);
+                TableSetupColumn("Schema", ImGuiTableColumnFlags.WidthFixed, 512);
+                TableHeadersRow();
                 TableNextRow();
+
+
+                //DAT FILES
                 TableSetColumnIndex(0);;
-                if (BeginListBox("##FILELIST")) {
-                    Text("AAAAAAAAAAA");
-                    Text("BBBBBBBBBBB");
-                    Text("CCCCCCCCCCC");
+                if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, 1024))) {
+                    for (int i = 0; i < datFileList.Count; i++) { 
+                        bool isSelected = datFileSelected == i;
+
+                        if (Selectable(datFileList[i], isSelected)) {
+                            datFileSelected = i;
+                        }
+
+                           
+                    }
                     EndListBox();
+
                 }
 
-
+                //DATA
                 TableSetColumnIndex(1);
-                //Text("B");
                 if (BeginTable("DATTABLE", columnsICareAbout.Count + 1, ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY)) {
                     TableSetupScrollFreeze(columnsICareAbout[0].name == "Id" ? 2 : 1, 1);
 
@@ -96,6 +129,17 @@ namespace ImGui.NET.SampleProgram {
                     }
                     EndTable();
                 }
+
+                //SCHEMA
+                {
+                    string selectedDatName = datFileList[datFileSelected];
+                    if (lowercaseToTitleCaseDats.ContainsKey(selectedDatName)) {
+                        string text = schemaText[lowercaseToTitleCaseDats[selectedDatName]];
+                        TableSetColumnIndex(2);
+                        InputTextMultiline("", ref text, (uint)text.Length, new System.Numerics.Vector2(512, 1024));
+                    }
+                }
+                
                 EndTable();
             }
 
