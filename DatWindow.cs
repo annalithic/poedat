@@ -28,8 +28,12 @@ namespace ImGui.NET.SampleProgram {
         string[] rows;
         List<Schema.Column> columnsICareAbout;
         List<string[]> columnData;
+        string[] rowBytes;
+        bool[] columnByteMode;
 
-        string ToHexSpaced(byte[] b, int start = 0, int length = int.MaxValue) {
+        bool byteView = false;
+
+        string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {
             if (start + length > b.Length) length = b.Length - start;
             if (b.Length <= start || length == 0) return "";
 
@@ -53,7 +57,8 @@ namespace ImGui.NET.SampleProgram {
             foreach(string dat in schemaText.Keys) lowercaseToTitleCaseDats[dat.ToLower()] = dat;
 
             schema = new Schema(@"E:\Projects2\dat-schema\dat-schema");
-            LoadDat("monstertypes");
+
+            LoadDat("chests");
 
             //rows = new string[Math.Min(dat.rowCount, 10)];
             //for (int i = 0; i < rows.Length; i++) {
@@ -62,7 +67,16 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void LoadDat(string filename) {
-
+            
+            if (datFileList[datFileSelected] != filename) {
+                for (int i = 0; i < datFileList.Count; i++) {
+                    if (datFileList[i] == filename) {
+                        datFileSelected = i;
+                        break;
+                    }
+                }
+            }
+            
             if (!lowercaseToTitleCaseDats.ContainsKey(filename)) {
                 failText = $"{filename} has no schema"; return;
             }
@@ -90,6 +104,13 @@ namespace ImGui.NET.SampleProgram {
                 columnsICareAbout.Add(col);
                 columnData.Add(dat.Column(col));
             }
+            columnByteMode = new bool[columnsICareAbout.Count];
+
+            rowBytes = new string[dat.rowCount];
+            for (int i = 0; i < rowBytes.Length; i++) {
+                //rowBytes[i] = Convert.ToHexString(dat.Row(i));
+                rowBytes[i] = ToHexSpaced(dat.Row(i));
+            }
         }
 
         public unsafe void Update() {
@@ -103,7 +124,9 @@ namespace ImGui.NET.SampleProgram {
 
 
                 //DAT FILES
-                TableSetColumnIndex(0);;
+                TableSetColumnIndex(0);
+                bool a = true;
+                Checkbox("BYTE VIEW", ref byteView);
                 if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, 1024))) {
                     for (int i = 0; i < datFileList.Count; i++) { 
                         bool isSelected = datFileSelected == i;
@@ -125,31 +148,81 @@ namespace ImGui.NET.SampleProgram {
                 //DATA
                 TableSetColumnIndex(1);
                 if(failText == null) {
-                    if (BeginTable("DATTABLE", columnsICareAbout.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY)) {
-                        TableSetupScrollFreeze(columnsICareAbout[0].name == "Id" ? 2 : 1, 1);
+                    if(byteView) {
+                        if (BeginTable("BYTETABLE", dat.rowWidth + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY)) {
+                            //TableSetupScrollFreeze(1, 1);
 
-                        TableSetupColumn("IDX");
-                        for (int i = 0; i < columnsICareAbout.Count; i++) {
-                            var column = columnsICareAbout[i];
-                            TableSetupColumn($"{column.name}\n{column.offset}");
-                        }
-                        TableHeadersRow();
+                            TableSetupColumn("IDX");
+                            for (int i = 0; i < dat.rowWidth; i++) {
+                                TableSetupColumn(i.ToString());
+                            }
+                            TableHeadersRow();
 
-                        var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
-                        clipper.Begin(dat.rowCount);
-                        while (clipper.Step()) {
-                            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
-                                TableNextRow();
-                                TableSetColumnIndex(0);
-                                Text(row.ToString()); //TODO garbagio
-                                for (int col = 0; col < columnsICareAbout.Count; col++) {
-                                    TableSetColumnIndex(col + 1);
-                                    Text(columnData[col][row]);
+                            var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+                            clipper.Begin(dat.rowCount);
+                            while (clipper.Step()) {
+                                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                                    TableNextRow();
+                                    TableSetColumnIndex(0);
+                                    Text(row.ToString()); //TODO garbagio
+                                    for (int col = 0; col < dat.rowWidth; col++) {
+                                        TableSetColumnIndex(col + 1);
+                                        Text(rowBytes[row].AsSpan().Slice(col * 3, 2));
+                                    }
                                 }
                             }
+                            EndTable();
                         }
-                        EndTable();
                     }
+                    else {
+                        if (BeginTable("DATTABLE", columnsICareAbout.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersV)) {
+                            TableSetupScrollFreeze(columnsICareAbout[0].name == "Id" ? 2 : 1, 1);
+
+                            TableSetupColumn("IDX");
+                            for (int i = 0; i < columnsICareAbout.Count; i++) {
+                                var column = columnsICareAbout[i];
+                                TableSetupColumn($"{column.name}\n{column.type}\n{column.offset}");
+                            }
+                            TableNextRow();
+                            TableSetColumnIndex(0);
+                            TableHeader("Row");
+
+                            for (int i = 0; i < columnsICareAbout.Count; i++) {
+                                TableSetColumnIndex(i + 1);
+                                string columnName = TableGetColumnName(i + 1);
+                                PushID(i);
+                                Checkbox("##byte", ref columnByteMode[i]);
+                                //SameLine();
+                                TableHeader(columnName);
+                                PopID();
+                            }
+                            //TableHeadersRow();
+
+                            var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+                            clipper.Begin(dat.rowCount);
+                            while (clipper.Step()) {
+                                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                                    TableNextRow();
+                                    TableSetColumnIndex(0);
+                                    Text(row.ToString()); //TODO garbagio
+                                    for (int col = 0; col < columnsICareAbout.Count; col++) {
+                                        TableSetColumnIndex(col + 1);
+                                        if (columnByteMode[col]) {
+                                            var column = columnsICareAbout[col];
+                                            ReadOnlySpan<char> text = rowBytes[row].AsSpan().Slice(column.offset * 3, column.Size() * 3 - 1);
+                                            Text(text);
+                                        } else {
+                                            string text = columnData[col][row];
+                                            Text(text);
+                                        }
+                                    }
+                                }
+                            }
+                            EndTable();
+                        }
+                    }
+
+
 
                 } else {
                     Text(failText);
