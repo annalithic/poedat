@@ -5,6 +5,7 @@ using static ImGuiNET.ImGui;
 using PoeFormats;
 using System.IO;
 using System.Collections.Generic;
+using Vortice.Win32;
 
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
@@ -22,6 +23,8 @@ namespace ImGui.NET.SampleProgram {
         Dictionary<string, string> lowercaseToTitleCaseDats;
 
         Dat dat;
+
+        Dictionary<string, string[]> rowIds;
 
 
         string datName;
@@ -57,6 +60,19 @@ namespace ImGui.NET.SampleProgram {
             foreach(string dat in schemaText.Keys) lowercaseToTitleCaseDats[dat.ToLower()] = dat;
 
             schema = new Schema(@"E:\Projects2\dat-schema\dat-schema");
+
+            rowIds = new Dictionary<string, string[]>();
+            foreach(string table in schema.schema.Keys) {
+                var columns = schema.schema[table];
+                if (columns[0].type == Schema.Column.Type.@string && columns[0].name == "Id") {
+                    string datPath = Path.Combine(datFolder, table.ToLower() + ".dat64");
+                    if(File.Exists(datPath)) {
+                        Dat d = new Dat(datPath);
+                        rowIds[table] = d.Column(columns[0]);
+                    }
+                }
+            }
+
 
             LoadDat("chests");
 
@@ -102,7 +118,7 @@ namespace ImGui.NET.SampleProgram {
             for (int i = 0; i < columns.Length; i++) {
                 var col = columns[i];
                 columnsICareAbout.Add(col);
-                columnData.Add(dat.Column(col));
+                columnData.Add(dat.Column(col, rowIds));
             }
             columnByteMode = new bool[columnsICareAbout.Count];
 
@@ -142,7 +158,6 @@ namespace ImGui.NET.SampleProgram {
                            
                     }
                     EndListBox();
-
                 }
 
                 //DATA
@@ -175,7 +190,7 @@ namespace ImGui.NET.SampleProgram {
                         }
                     }
                     else {
-                        if (BeginTable("DATTABLE", columnsICareAbout.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersV)) {
+                        if (BeginTable(datFileList[datFileSelected], columnsICareAbout.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersV | ImGuiTableFlags.Resizable)) {
                             TableSetupScrollFreeze(columnsICareAbout[0].name == "Id" ? 2 : 1, 1);
 
                             TableSetupColumn("IDX");
@@ -207,8 +222,11 @@ namespace ImGui.NET.SampleProgram {
                                     Text(row.ToString()); //TODO garbagio
                                     for (int col = 0; col < columnsICareAbout.Count; col++) {
                                         TableSetColumnIndex(col + 1);
+
+                                        var column = columnsICareAbout[col];
+                                        if (column.type == Schema.Column.Type.rid)
+                                            TableSetBgColor(ImGuiTableBgTarget.CellBg, GetColorU32(new System.Numerics.Vector4(0, 1, 0, 0.1f)));
                                         if (columnByteMode[col]) {
-                                            var column = columnsICareAbout[col];
                                             ReadOnlySpan<char> text = rowBytes[row].AsSpan().Slice(column.offset * 3, column.Size() * 3 - 1);
                                             Text(text);
                                         } else {
@@ -236,6 +254,7 @@ namespace ImGui.NET.SampleProgram {
                         TableSetColumnIndex(2);
                         InputTextMultiline("", ref text, (uint)text.Length, new System.Numerics.Vector2(512, 1024));
                     }
+                    Text("Inspector");
                 }
                 
                 EndTable();
