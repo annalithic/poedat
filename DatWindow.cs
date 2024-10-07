@@ -54,6 +54,7 @@ namespace ImGui.NET.SampleProgram {
         string inspectorFloatArray; bool analysisFloatArray;
         string inspectorStringArray; bool analysisStringArray;
         string inspectorRefArray; bool analysisRefArray;
+        string inspectorUnkArray; bool analysisUnkArray;
 
         string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {
             if (start + length > b.Length) length = b.Length - start;
@@ -187,6 +188,7 @@ namespace ImGui.NET.SampleProgram {
             inspectorFloatArray = null;
             inspectorStringArray = null;
             inspectorRefArray = null;
+            inspectorUnkArray = null;
         }
 
         bool AnalyseFloat(float f) {
@@ -245,6 +247,7 @@ namespace ImGui.NET.SampleProgram {
             analysisFloatArray = false;
             analysisStringArray = false;
             analysisRefArray = false;
+            analysisUnkArray = false;
             if (longLower < 0) {
                 inspectorString = $"!!! (negative offset {longLower})";
 
@@ -252,7 +255,7 @@ namespace ImGui.NET.SampleProgram {
                 inspectorFloatArray = inspectorIntArray;
                 inspectorStringArray = inspectorIntArray;
                 inspectorRefArray = inspectorIntArray;
-
+                inspectorUnkArray = inspectorIntArray;
             }
             else {
                 if (longLower + 1 >= varying.Length) {
@@ -268,15 +271,28 @@ namespace ImGui.NET.SampleProgram {
                     inspectorFloatArray = inspectorIntArray;
                     inspectorStringArray = inspectorIntArray;
                     inspectorRefArray = inspectorIntArray;
+                    inspectorUnkArray = inspectorIntArray;
                 }
                 else if (longLower > 200) {
                     inspectorIntArray = $"!!! (array size implausibly big {longLower})";
                     inspectorFloatArray = inspectorIntArray;
                     inspectorStringArray = inspectorIntArray;
                     inspectorRefArray = inspectorIntArray;
+                    inspectorUnkArray = inspectorIntArray;
                 }
                 else {
                     long lengthToEnd = varying.Length - longUpper;
+                    if(lengthToEnd <= 0) {
+                        inspectorUnkArray = $"!!! (offset too big {longUpper})";
+                    } else {
+                        StringBuilder s = new StringBuilder("[");
+                        for (int i = 0; i < longLower; i++) s.Append("?, ");
+                        if (longLower > 0) s.Remove(s.Length - 2, 2);
+                        s.Append(']');
+                        inspectorUnkArray = s.ToString();
+                        analysisUnkArray = true;
+                    }
+
                     if (lengthToEnd < longLower * 4) {
                         inspectorIntArray = $"!!! (no room for {longLower} ints)";
                         inspectorFloatArray = $"!!! (no room for {longLower} floats)";
@@ -525,7 +541,7 @@ namespace ImGui.NET.SampleProgram {
                         InspectorRow("Float Array", inspectorFloatArray, analysisFloatArray);
                         InspectorRow("String Array", inspectorStringArray, analysisStringArray);
                         InspectorRow("Ref Array", inspectorRefArray, analysisRefArray);
-
+                        InspectorRow("Unknown Array", inspectorUnkArray, analysisUnkArray);
                         EndTable();
                     }
 
