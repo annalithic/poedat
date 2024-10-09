@@ -16,7 +16,11 @@ namespace ImGui.NET.SampleProgram {
         Dictionary<string, string> inputSchema;
 
         List<string> datFileList;
+        int[] datRowCount;
+        string[] datFileListSortedByRowCount;
+
         int datFileSelected;
+        string titleCaseDatFileSelected;
 
         Dictionary<string, string> schemaText;
         string currentSchemaText;
@@ -32,6 +36,7 @@ namespace ImGui.NET.SampleProgram {
         int selectedRow;
         int selectedColumn;
 
+        int possibleRefMode = 0;
 
         string datName;
         string[] rows;
@@ -49,12 +54,17 @@ namespace ImGui.NET.SampleProgram {
         string inspectorFloat; bool analysisFloat;
         string inspectorString; bool analysisString;
         string inspectorRef; bool analysisRef;
+        int inspectorRefValue;
 
         string inspectorIntArray; bool analysisIntArray;
         string inspectorFloatArray; bool analysisFloatArray;
         string inspectorStringArray; bool analysisStringArray;
         string inspectorRefArray; bool analysisRefArray;
         string inspectorUnkArray; bool analysisUnkArray;
+        List<int> inspectorRefArrayValues;
+
+        string possibleRefFilter = "";
+        string possibleRefValueFilter = "";
 
         string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {
             if (start + length > b.Length) length = b.Length - start;
@@ -81,26 +91,41 @@ namespace ImGui.NET.SampleProgram {
 
             schema = new Schema(@"E:\Projects2\dat-schema\dat-schema");
 
+            datRowCount = new int[datFileList.Count];
+            datFileListSortedByRowCount = new string[datFileList.Count];
             rowIds = new Dictionary<string, string[]>();
-            foreach(string table in schema.schema.Keys) {
-                var columns = schema.schema[table];
-                if (columns[0].type == Schema.Column.Type.@string && columns[0].name == "Id") {
-                    string datPath = Path.Combine(datFolder, table.ToLower() + ".dat64");
-                    if(File.Exists(datPath)) {
-                        Dat d = new Dat(datPath);
-                        if(d.rowCount > maxRows) maxRows = d.rowCount;
-                        rowIds[table] = d.Column(columns[0]);
+            for (int i = 0; i < datFileList.Count; i++) {
+                
+                string datFile = datFileList[i];
+                datFileListSortedByRowCount[i] = datFile;
+                string datPath = Path.Combine(datFolder, datFile + ".dat64");
+                Dat d = new Dat(datPath);
+                datRowCount[i] = d.rowCount;
+                if (d.rowCount > maxRows) maxRows = d.rowCount;
+
+                if (lowercaseToTitleCaseDats.ContainsKey(datFile)) {
+                    string titleCaseDat = lowercaseToTitleCaseDats[datFile];
+                    if(schema.schema.ContainsKey(titleCaseDat)) {
+                        var columns = schema.schema[titleCaseDat];
+                        if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
+                            rowIds[titleCaseDat] = d.Column(columns[0]);
+                        } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
+                            rowIds[titleCaseDat] = d.Column(columns[1]);
+                        }
                     }
                 }
+
             }
 
+            Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
 
-            LoadDat("chests");
+            LoadDat("geometrytrigger");
 
             //rows = new string[Math.Min(dat.rowCount, 10)];
             //for (int i = 0; i < rows.Length; i++) {
             //    rows[i] = ToHexSpaced(dat.rows[i]);
             //}
+
         }
 
         void UpdateSchema(string text) {
@@ -127,7 +152,7 @@ namespace ImGui.NET.SampleProgram {
                 failText = $"{filename} has no schema"; return;
             }
             string fileTitleCase = lowercaseToTitleCaseDats[filename];
-
+            titleCaseDatFileSelected = fileTitleCase;
 
 
             currentSchemaText = schemaText[fileTitleCase];
@@ -179,16 +204,16 @@ namespace ImGui.NET.SampleProgram {
 
             selectedRow = -1;
             selectedColumn = -1;
-            inspectorBool = null;
-            inspectorInt = null;
-            inspectorFloat = null;
-            inspectorRef = null;
-            inspectorString = null;
-            inspectorIntArray = null;
-            inspectorFloatArray = null;
-            inspectorStringArray = null;
-            inspectorRefArray = null;
-            inspectorUnkArray = null;
+            inspectorBool = null; analysisBool = false;
+            inspectorInt = null; analysisInt = false;
+            inspectorFloat = null; analysisFloat = false;
+            inspectorRef = null; analysisRef = false;
+            inspectorString = null; analysisString = false;
+            inspectorIntArray = null; analysisIntArray = false;
+            inspectorFloatArray = null; analysisFloatArray = false;
+            inspectorStringArray = null; analysisStringArray = false;
+            inspectorRefArray = null; analysisRefArray = false;
+            inspectorUnkArray = null; analysisUnkArray = false;
         }
 
         bool AnalyseFloat(float f) {
@@ -221,8 +246,10 @@ namespace ImGui.NET.SampleProgram {
             inspectorFloat = floatValue.ToString();
 
             analysisRef = false;
+            inspectorRefValue = -1;
+
             long longLower = BitConverter.ToInt64(data, offset);
-            long longUpper = BitConverter.ToInt64(data, offset + 8);
+            long longUpper = BitConverter.ToInt64(data, offset + 8); //if less than 16 bytes from end of data
 
             //ref
             if(longLower == -72340172838076674 && longUpper == -72340172838076674) {
@@ -237,6 +264,7 @@ namespace ImGui.NET.SampleProgram {
                     inspectorRef = $"!!! (too large value {longLower})";
                 else {
                     analysisRef = true;
+                    inspectorRefValue = (int)longLower;
                     inspectorRef = longLower.ToString();
                 }
             }
@@ -248,6 +276,8 @@ namespace ImGui.NET.SampleProgram {
             analysisStringArray = false;
             analysisRefArray = false;
             analysisUnkArray = false;
+            inspectorRefArrayValues = new List<int>();
+
             if (longLower < 0) {
                 inspectorString = $"!!! (negative offset {longLower})";
 
@@ -365,6 +395,7 @@ namespace ImGui.NET.SampleProgram {
                                 s.Append($"!!! (too large {refLower}), ");
                             } else {
                                 s.Append($"{refLower}, ");
+                                inspectorRefArrayValues.Add((int)refLower); //TODO what about invalid values?
                             }
                         }
                         if (longLower > 0) {
@@ -375,6 +406,7 @@ namespace ImGui.NET.SampleProgram {
                     }
                 }
             }
+            Console.WriteLine("A");
         }
 
         public unsafe void Update() {
@@ -472,6 +504,7 @@ namespace ImGui.NET.SampleProgram {
                                 for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
                                     TableNextRow();
                                     TableSetColumnIndex(0);
+                                    if(selectedRow == row) TableSetBgColor(ImGuiTableBgTarget.RowBg0, GetColorU32(new System.Numerics.Vector4(0.3f, 0.5f, 1, 0.3f)));
                                     Text(row.ToString()); //TODO garbagio
                                     for (int col = 0; col < tableColumns.Count; col++) {
                                         TableSetColumnIndex(col + 1);
@@ -482,13 +515,19 @@ namespace ImGui.NET.SampleProgram {
                                             TableSetBgColor(ImGuiTableBgTarget.CellBg, GetColorU32(new System.Numerics.Vector4(0, 1, 0, 0.1f)));
                                         if (column.type == Schema.Column.Type.Byte || columnByteMode[col]) {
                                             ReadOnlySpan<char> text = rowBytes[row].AsSpan().Slice(column.offset * 3, column.Size() * 3 - 1);
+                                            bool isZero = true;
+                                            for(int i = 0; i < column.Size(); i++)
+                                                if(dat.Row(row)[column.offset + i] != 0)
+                                                    isZero = false;
                                             PushID(row * tableColumns.Count + col);
+                                            if (isZero) PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1));
                                             if (Selectable(text, selectedColumn == col && selectedRow == row)) {
 
                                                 selectedColumn = col;
                                                 selectedRow = row;
                                                 Analyse(row, column.offset);
                                             }
+                                            if (isZero) PopStyleColor();
                                         } else {
                                             string text = columnData[col][row];
                                             PushID(row * tableColumns.Count + col);
@@ -517,7 +556,7 @@ namespace ImGui.NET.SampleProgram {
                 {
                     if(currentSchemaText != null) {
                         TableSetColumnIndex(2);
-                        InputTextMultiline("", ref currentSchemaText, 65535, new System.Numerics.Vector2(512, 1024));
+                        InputTextMultiline("", ref currentSchemaText, 65535, new System.Numerics.Vector2(512, 768));
 
                         if (Button("Parse")) {
                             UpdateSchema(currentSchemaText);
@@ -543,6 +582,125 @@ namespace ImGui.NET.SampleProgram {
                         InspectorRow("Ref Array", inspectorRefArray, analysisRefArray);
                         InspectorRow("Unknown Array", inspectorUnkArray, analysisUnkArray);
                         EndTable();
+                    }
+
+
+                    bool showRefValues = analysisRef && inspectorRefValue >= 0;
+                    bool showRefArrayValues = analysisRefArray && inspectorRefArrayValues.Count > 0;
+                    if (showRefValues || showRefArrayValues) {
+
+                        bool core = schema.tableFiles[titleCaseDatFileSelected] == "_Core";
+
+                        Text("Possible Refs");
+                        SameLine();
+                        RadioButton("All", ref possibleRefMode, 0); SameLine();
+                        if (core) BeginDisabled();
+                        RadioButton("Sibling", ref possibleRefMode, 1);
+                        if (core) EndDisabled();
+                        SameLine();
+                        RadioButton("Core", ref possibleRefMode, 2); SameLine();
+                        if (core) BeginDisabled();
+                        RadioButton("Core+Sib", ref possibleRefMode, 3);
+                        if (core) EndDisabled();
+                        SameLine();
+                        RadioButton("No Schema", ref possibleRefMode, 4);
+                        PushItemWidth(158);
+                        InputText("Filter Table", ref possibleRefFilter, 256);
+                        SameLine();
+                        PushItemWidth(158);
+                        InputText("Filter Values", ref possibleRefValueFilter, 256);
+
+                    }
+
+                    if (showRefArrayValues) {
+                        int maxRow = 0;
+                        for(int i = 0; i < inspectorRefArrayValues.Count; i++)
+                            if (inspectorRefArrayValues[i] > maxRow)
+                                maxRow = inspectorRefArrayValues[i];
+
+                        //TODO shouldn't be building these strings every frame lol
+                        if (BeginTable("Array Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
+                            for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
+                                if (datRowCount[i] > maxRow) {
+                                    string table = datFileListSortedByRowCount[i];
+                                    if (possibleRefFilter.Length > 0 && !table.Contains(possibleRefFilter)) continue;
+                                    if (lowercaseToTitleCaseDats.ContainsKey(table)) {
+                                        table = lowercaseToTitleCaseDats[table];
+                                        if (possibleRefMode == 4) continue;
+                                    }
+                                    else if (possibleRefMode != 4 && possibleRefMode != 0) continue;
+                                    if (schema.enums.ContainsKey(table))
+                                        continue;
+                                    if (schema.tableFiles.ContainsKey(table)) {
+                                        string file = schema.tableFiles[table];
+                                        bool core = file == "_Core";
+                                        bool sibling = file == schema.tableFiles[titleCaseDatFileSelected];
+                                        if (possibleRefMode == 1 && !sibling) continue;
+                                        if (possibleRefMode == 2 && !core) continue;
+                                        if (possibleRefMode == 3 && !sibling && !core) continue;
+                                    }
+
+                                    StringBuilder s = new StringBuilder("[");
+                                    for (int row = 0; row < inspectorRefArrayValues.Count; row++) {
+                                        if (rowIds.ContainsKey(table))
+                                            s.Append(rowIds[table][inspectorRefArrayValues[row]]);
+                                        else
+                                            s.Append(inspectorRefArrayValues[row].ToString());
+                                        s.Append(", ");
+                                    }
+                                    if (s.Length > 1) s.Remove(s.Length - 2, 2); s.Append(']');
+                                    string ss = s.ToString();
+
+                                    if (possibleRefValueFilter.Length > 0 && !ss.ToLower().Contains(possibleRefValueFilter)) continue;
+
+                                    TableNextRow();
+                                    TableSetColumnIndex(0); Text($"{table} ({datRowCount[i]})");
+                                    TableSetColumnIndex(1);
+
+
+                                    Text(ss);
+                                    SetItemTooltip(ss);
+                                }
+                                //string datFile
+                            }
+                            EndTable();
+                        }
+                    }
+
+                    if (showRefValues) {
+                        if (BeginTable("Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
+                            for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
+                                if (datRowCount[i] > inspectorRefValue) {
+                                    string table = datFileListSortedByRowCount[i];
+                                    if (possibleRefFilter.Length > 0 && !table.Contains(possibleRefFilter)) continue;
+                                    if (lowercaseToTitleCaseDats.ContainsKey(table)) {
+                                        table = lowercaseToTitleCaseDats[table];
+                                        if (possibleRefMode == 4) continue;
+                                    }
+                                    else if (possibleRefMode != 4 && possibleRefMode != 0) continue;
+                                    if (schema.enums.ContainsKey(table)) 
+                                        continue;
+                                    if (schema.tableFiles.ContainsKey(table)) {
+                                        string file = schema.tableFiles[table];
+                                        bool core = file == "_Core";
+                                        bool sibling = file == schema.tableFiles[titleCaseDatFileSelected];
+                                        if (possibleRefMode == 1 && !sibling) continue;
+                                        if (possibleRefMode == 2 && !core) continue;
+                                        if (possibleRefMode == 3 && !sibling && !core) continue;
+                                    }
+                                    string s = rowIds.ContainsKey(table) ? rowIds[table][inspectorRefValue] : inspectorRefValue.ToString();
+
+                                    if (possibleRefValueFilter.Length > 0 && !s.ToLower().Contains(possibleRefValueFilter)) continue;
+                                    TableNextRow();
+                                    TableSetColumnIndex(0); Text($"{table} ({datRowCount[i]})");
+                                    TableSetColumnIndex(1); Text(s); SetItemTooltip(s);
+
+
+                                }
+                                //string datFile
+                            }
+                            EndTable();
+                        }
                     }
 
                     //Text(selectedColumn.ToString());
