@@ -79,6 +79,29 @@ namespace ImGui.NET.SampleProgram {
             return s.ToString();
         }
 
+        string MakeArrayString<T>(T val, int count) {
+            string sVal = val.ToString();
+            StringBuilder s = new StringBuilder("[");
+            for (int i = 0; i < count; i++) {
+                s.Append(sVal);
+                s.Append(", ");
+            }
+            if (count > 0) s.Remove(s.Length - 2, 2);
+            s.Append("]");
+            return s.ToString();
+        }
+
+        string MakeArrayString<T>(T[] t) {
+            StringBuilder s = new StringBuilder("[");
+            for(int i = 0; i < t.Length; i++) {
+                s.Append(t[i].ToString());
+                s.Append(", ");
+            }
+            if (t.Length > 0) s.Remove(s.Length - 2, 2);
+            s.Append("]");
+            return s.ToString();
+        }
+
         public DatWindow(string path) {
             datFileList = new List<string>();
             foreach(string datPath in Directory.EnumerateFiles(datFolder, "*.dat64")) {
@@ -218,7 +241,7 @@ namespace ImGui.NET.SampleProgram {
 
         bool AnalyseFloat(float f) {
             if (f < 0.00001 && f > -0.00001 && f != 0) return false;
-            if (f < 1000000000 || f > -1000000000) return false;
+            if (f > 1000000000 || f < -1000000000) return false;
             return true;
         }
 
@@ -226,187 +249,179 @@ namespace ImGui.NET.SampleProgram {
             byte[] data = dat.data;
             byte[] varying = dat.varying;
             int offset = dat.rowWidth * row + columnOffset;
+            int distToEnd = dat.rowWidth - columnOffset;
 
-            byte b = data[offset];
-            if(b > 1) {
-                inspectorBool = $"!!! (greater than one {(int)b})";
+            if(distToEnd <= 0) {
+                inspectorBool = "OOB";
                 analysisBool = false;
             } else {
-                inspectorBool = b == 1 ? "True" : "False";
-                analysisBool = true;
-            }
-            
-
-            int intValue = BitConverter.ToInt32(data, offset);
-            inspectorInt = intValue.ToString();
-            analysisInt = true;
-
-            float floatValue = BitConverter.ToSingle(data, offset);
-            analysisFloat = AnalyseFloat(floatValue);
-            inspectorFloat = floatValue.ToString();
-
-            analysisRef = false;
-            inspectorRefValue = -1;
-
-            long longLower = BitConverter.ToInt64(data, offset);
-            long longUpper = BitConverter.ToInt64(data, offset + 8); //if less than 16 bytes from end of data
-
-            //ref
-            if(longLower == -72340172838076674 && longUpper == -72340172838076674) {
-                inspectorRef = "NULL VALUE";
-                analysisRef = true;
-            } else if (longUpper != 0) {
-                inspectorRef = $"!!! (bytes 8-16 non zero {longUpper})";
-            } else {
-                if (longLower < 0)
-                    inspectorRef = $"!!! (negative value {longLower})";
-                else if (longLower >= maxRows)
-                    inspectorRef = $"!!! (too large value {longLower})";
-                else {
-                    analysisRef = true;
-                    inspectorRefValue = (int)longLower;
-                    inspectorRef = longLower.ToString();
+                byte b = data[offset];
+                if (b > 1) {
+                    inspectorBool = $"!!! (greater than one {(int)b})";
+                    analysisBool = false;
                 }
+                else {
+                    inspectorBool = b == 1 ? "True" : "False";
+                    analysisBool = true;
+                }
+
             }
 
-            //string
+
+            if(distToEnd < 4) {
+                inspectorInt = "OOB"; analysisInt = false;
+                inspectorFloat = "OOB"; analysisFloat = false;
+            } else {
+                int intValue = BitConverter.ToInt32(data, offset);
+                inspectorInt = intValue.ToString();
+                analysisInt = true;
+
+                float floatValue = BitConverter.ToSingle(data, offset);
+                analysisFloat = AnalyseFloat(floatValue);
+                inspectorFloat = floatValue.ToString();
+            }
+
             analysisString = false;
+            analysisRef = false;
             analysisIntArray = false;
             analysisFloatArray = false;
             analysisStringArray = false;
             analysisRefArray = false;
             analysisUnkArray = false;
-            inspectorRefArrayValues = new List<int>();
 
-            if (longLower < 0) {
-                inspectorString = $"!!! (negative offset {longLower})";
-
-                inspectorIntArray = $"!!! (negative count {longLower})";
-                inspectorFloatArray = inspectorIntArray;
-                inspectorStringArray = inspectorIntArray;
-                inspectorRefArray = inspectorIntArray;
-                inspectorUnkArray = inspectorIntArray;
-            }
-            else {
-                if (longLower + 1 >= varying.Length) {
-                    inspectorString = $"!!! (offset too big {longLower})";
-                }
-                else {
-                    analysisString = true;
-                    inspectorString = Dat.ReadWStringNullTerminated(varying, (int)longLower);
+            //8 byte types (string)
+            if (distToEnd < 8) {
+                inspectorString = "OOB"; 
+                inspectorRef = "OOB";
+                SetInspectorArrayValues("OOB");
+            } else {
+                long longLower = BitConverter.ToInt64(data, offset);
+                if (longLower < 8 || longLower + 1 >= varying.Length) {
+                    inspectorString = $"OFFSET OOB {longLower}";
+                } else if (longLower % 2 == 1) {
+                    inspectorString = $"OFFSET NOT EVEN {longLower}";
+                } else {
+                    inspectorString = Dat.ReadWStringNullTerminated(varying, (int)longLower); analysisString = true;
                 }
 
-                if (longUpper < 0) {
-                    inspectorIntArray = $"!!! (negative offset {longUpper})";
-                    inspectorFloatArray = inspectorIntArray;
-                    inspectorStringArray = inspectorIntArray;
-                    inspectorRefArray = inspectorIntArray;
-                    inspectorUnkArray = inspectorIntArray;
-                }
-                else if (longLower > 200) {
-                    inspectorIntArray = $"!!! (array size implausibly big {longLower})";
-                    inspectorFloatArray = inspectorIntArray;
-                    inspectorStringArray = inspectorIntArray;
-                    inspectorRefArray = inspectorIntArray;
-                    inspectorUnkArray = inspectorIntArray;
-                }
-                else {
-                    long lengthToEnd = varying.Length - longUpper;
-                    if(lengthToEnd <= 0) {
-                        inspectorUnkArray = $"!!! (offset too big {longUpper})";
+                //16 byte types
+                if (distToEnd < 16) {
+                    inspectorRef = "OOB";
+                    SetInspectorArrayValues("OOB");
+                } else {
+                    //ref
+                    inspectorRefValue = -1;
+                    long longUpper = BitConverter.ToInt64(data, offset + 8); //if less than 16 bytes from end of data
+                    if (longLower == -72340172838076674 && longUpper == -72340172838076674) {
+                        inspectorRef = "null";
+                        analysisRef = true;
+                    } else if (longUpper != 0) {
+                        inspectorRef = $"bytes 8-16 non zero {longUpper}";
+                    } else if (longLower < 0) { 
+                        inspectorRef = $"negative row index {longLower}";
+                    }else if (longLower >= maxRows) {
+                        inspectorRef = $"row index too large {longLower})";
                     } else {
-                        StringBuilder s = new StringBuilder("[");
-                        for (int i = 0; i < longLower; i++) s.Append("?, ");
-                        if (longLower > 0) s.Remove(s.Length - 2, 2);
-                        s.Append(']');
-                        inspectorUnkArray = s.ToString();
-                        analysisUnkArray = true;
+                        analysisRef = true;
+                        inspectorRefValue = (int)longLower;
+                        inspectorRef = longLower.ToString();
                     }
 
-                    if (lengthToEnd < longLower * 4) {
-                        inspectorIntArray = $"!!! (no room for {longLower} ints)";
-                        inspectorFloatArray = $"!!! (no room for {longLower} floats)";
-                    }
-                    else {
-                        analysisIntArray = true;
-                        analysisFloatArray = false;
-
-                        StringBuilder sInt = new StringBuilder("[");
-                        StringBuilder sFloat = new StringBuilder("[");
-                        for (int i = 0; i < longLower; i++) {
-                            sInt.Append(BitConverter.ToInt32(varying, (int)longUpper + 4 * i).ToString()); sInt.Append(", ");
-                            float f = BitConverter.ToSingle(varying, (int)longUpper + 4 * i);
-                            if (!AnalyseFloat(f)) analysisFloatArray = false;
-                            sFloat.Append(f.ToString()); sFloat.Append(", ");
-                        }
-                        if (longLower > 0) {
-                            sInt.Remove(sInt.Length - 2, 2);
-                            sFloat.Remove(sFloat.Length - 2, 2);
-                        }
-                        sInt.Append(']');
-                        sFloat.Append(']');
-                        inspectorIntArray = sInt.ToString();
-                        inspectorFloatArray = sFloat.ToString();
-                    }
-
-                    if (lengthToEnd < longLower * 8) {
-                        inspectorStringArray = $"!!! (no room for {longLower} strings)";
-                    }
-                    else {
-                        analysisStringArray = true;
-
-                        StringBuilder s = new StringBuilder("[");
-                        for (int i = 0; i < longLower; i++) {
-                            long strOffset = BitConverter.ToInt64(varying, (int)longUpper + 8 * i);
-                            if (strOffset < 0 || strOffset + 1 >= varying.Length) {
-                                s.Append($"!!! (string oob {strOffset}, ");
-                                analysisStringArray = false;
-                            }
-                            else {
-                                s.Append(Dat.ReadWStringNullTerminated(varying, (int)strOffset));
-                                s.Append(", ");
-                            }
-                        }
-
-                        if (longLower > 0) {
-                            s.Remove(s.Length - 2, 2);
-                        }
-                        s.Append(']');
-                        inspectorStringArray = s.ToString();
-                    }
-
-                    if (lengthToEnd < longLower * 16) {
-                        inspectorRefArray = $"!!! (no room for {longLower} refs)";
+                    //arrays
+                    if(longLower < 0) {
+                        SetInspectorArrayValues($"negative count {longLower}");
+                    }  else if(longUpper < 0) {
+                        SetInspectorArrayValues($"negative offset {longUpper}");
+                    } else if (longLower > 200) {
+                        SetInspectorArrayValues($"array size implausibly big {longLower}");
                     } else {
-                        analysisRefArray = true;
+                        long lengthToEnd = varying.Length - longUpper;
 
-                        StringBuilder s = new StringBuilder("[");
-                        for (int i = 0; i < longLower; i++) {
-                            long refLower = BitConverter.ToInt64(varying, (int)longUpper + 16 * i);
-                            long refUpper = BitConverter.ToInt64(varying, (int)longUpper + 16 * i + 8);
-                            if (refLower == -72340172838076674 && refUpper == -72340172838076674) {
-                                s.Append("NULL, ");
-                            } else if (refUpper != 0) {
-                                analysisRefArray = false;
-                                s.Append($"!!! (bytes 8-16 non zero {refUpper}), ");
-                            } else if (refLower < 0) {
-                                s.Append($"!!! (negative {refLower}), ");
-                            } else if (refLower > maxRows) {
-                                s.Append($"!!! (too large {refLower}), ");
-                            } else {
-                                s.Append($"{refLower}, ");
-                                inspectorRefArrayValues.Add((int)refLower); //TODO what about invalid values?
+
+                        //unk array
+                        if (lengthToEnd <= 0) {
+                            inspectorUnkArray = $"!!! (offset too big {longUpper})";
+                        }
+                        else {
+                            StringBuilder s = new StringBuilder("[");
+                            inspectorUnkArray = MakeArrayString("?", (int)longLower);
+                            analysisUnkArray = true;
+                        }
+
+                        //4 byte array
+                        if (lengthToEnd < longLower * 4) {
+                            inspectorIntArray = $"no room for {longLower} ints";
+                            inspectorFloatArray = $"no room for {longLower} floats";
+                        } else {
+                            analysisIntArray = true;
+                            analysisFloatArray = false;
+
+                            int[] ints = new int[longLower];
+                            float[] floats = new float[longLower];
+
+                            for (int i = 0; i < longLower; i++) {
+                                ints[i] = BitConverter.ToInt32(varying, (int)longUpper + 4 * i);
+                                float f = BitConverter.ToSingle(varying, (int)longUpper + 4 * i);
+                                if (!AnalyseFloat(f)) analysisFloatArray = false;
+                                floats[i] = f;
                             }
+                            inspectorIntArray = MakeArrayString(ints);
+                            inspectorFloatArray = MakeArrayString(floats);
                         }
-                        if (longLower > 0) {
-                            s.Remove(s.Length - 2, 2);
+
+                        //8 byte array (string)
+                        if (lengthToEnd < longLower * 8) {
+                            inspectorStringArray = $"no room for {longLower} string offsets";
+                        } else {
+                            analysisStringArray = true;
+                            string[] strings = new string[longLower];
+                            for (int i = 0; i < longLower; i++) {
+                                long strOffset = BitConverter.ToInt64(varying, (int)longUpper + 8 * i);
+                                if (strOffset < 0 || strOffset + 1 >= varying.Length) {
+                                    strings[i] = $"OOB {strOffset}";
+                                    analysisStringArray = false;
+                                } else {
+                                    strings[i] = Dat.ReadWStringNullTerminated(varying, (int)strOffset);
+                                }
+                            }
+                            inspectorStringArray = MakeArrayString(strings);
                         }
-                        s.Append(']');
-                        inspectorRefArray = s.ToString();
+
+                        //16 byte array (refs)
+
+                        if (lengthToEnd < longLower * 16) {
+                            inspectorRefArray = $"no room for {longLower} refs";
+                        } else {
+                            analysisRefArray = true;
+                            inspectorRefArrayValues = new List<int>();
+
+                            string[] refs = new string[longLower];
+                            for (int i = 0; i < longLower; i++) {
+                                long refLower = BitConverter.ToInt64(varying, (int)longUpper + 16 * i);
+                                long refUpper = BitConverter.ToInt64(varying, (int)longUpper + 16 * i + 8);
+                                if (refLower == -72340172838076674 && refUpper == -72340172838076674) {
+                                    refs[i] = "null"; //TODO why would there be null values in array?
+                                } else if (refUpper != 0) {
+                                    analysisRefArray = false;
+                                    refs[i] = $"bytes 8-16 non zero {refUpper}";
+                                } else if (refLower < 0) {
+                                    analysisRefArray = false;
+                                    refs[i] = $"negative row index {refLower}";
+                                } else if (refLower > maxRows) {
+                                    analysisRefArray = false;
+                                    refs[i] = $"row index too large {refLower})";
+                                } else {
+                                    refs[i] = refLower.ToString();
+                                    inspectorRefArrayValues.Add((int)refLower); //TODO what about invalid values?
+                                }
+                            }
+                            inspectorRefArray = MakeArrayString(refs);
+                        }
+
                     }
+
                 }
             }
-            Console.WriteLine("A");
         }
 
         public unsafe void Update() {
@@ -710,6 +725,14 @@ namespace ImGui.NET.SampleProgram {
                 EndTable();
             }
 
+        }
+
+        void SetInspectorArrayValues(string s) {
+            inspectorIntArray = s;
+            inspectorFloatArray = s;
+            inspectorStringArray = s;
+            inspectorRefArray = s;
+            inspectorUnkArray = s;
         }
 
         void InspectorRow(string label, string value, bool analysis) {
