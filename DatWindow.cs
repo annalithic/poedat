@@ -45,26 +45,29 @@ namespace ImGui.NET.SampleProgram {
         List<Schema.Column> tableColumns;
         string[] rowBytes;
         bool[] columnByteMode;
+        
 
         bool byteView = false;
 
         //inspector results
-        string inspectorBool; bool analysisBool;
-        string inspectorInt; bool analysisInt;
-        string inspectorFloat; bool analysisFloat;
-        string inspectorString; bool analysisString;
-        string inspectorRef; bool analysisRef;
+        string inspectorBool;
+        string inspectorInt;
+        string inspectorFloat;
+        string inspectorString;
+        string inspectorRef;
         int inspectorRefValue;
 
-        string inspectorIntArray; bool analysisIntArray;
-        string inspectorFloatArray; bool analysisFloatArray;
-        string inspectorStringArray; bool analysisStringArray;
-        string inspectorRefArray; bool analysisRefArray;
-        string inspectorUnkArray; bool analysisUnkArray;
+        string inspectorIntArray;
+        string inspectorFloatArray;
+        string inspectorStringArray;
+        string inspectorRefArray;
+        string inspectorUnkArray;
         List<int> inspectorRefArrayValues;
 
         string possibleRefFilter = "";
         string possibleRefValueFilter = "";
+
+        Analysis tempAnalysis;
 
         string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {
             if (start + length > b.Length) length = b.Length - start;
@@ -142,7 +145,7 @@ namespace ImGui.NET.SampleProgram {
 
             Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
 
-            LoadDat("geometrytrigger");
+            LoadDat("mods");
 
             //rows = new string[Math.Min(dat.rowCount, 10)];
             //for (int i = 0; i < rows.Length; i++) {
@@ -227,16 +230,16 @@ namespace ImGui.NET.SampleProgram {
 
             selectedRow = -1;
             selectedColumn = -1;
-            inspectorBool = null; analysisBool = false;
-            inspectorInt = null; analysisInt = false;
-            inspectorFloat = null; analysisFloat = false;
-            inspectorRef = null; analysisRef = false;
-            inspectorString = null; analysisString = false;
-            inspectorIntArray = null; analysisIntArray = false;
-            inspectorFloatArray = null; analysisFloatArray = false;
-            inspectorStringArray = null; analysisStringArray = false;
-            inspectorRefArray = null; analysisRefArray = false;
-            inspectorUnkArray = null; analysisUnkArray = false;
+            inspectorBool = null;
+            inspectorInt = null;
+            inspectorFloat = null;
+            inspectorRef = null;
+            inspectorString = null;
+            inspectorIntArray = null;
+            inspectorFloatArray = null;
+            inspectorStringArray = null;
+            inspectorRefArray = null;
+            inspectorUnkArray = null;
         }
 
         bool AnalyseFloat(float f) {
@@ -246,6 +249,7 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void Analyse(int row, int columnOffset) {
+            tempAnalysis = new Analysis(dat, columnOffset, maxRows);
             byte[] data = dat.data;
             byte[] varying = dat.varying;
             int offset = dat.rowWidth * row + columnOffset;
@@ -253,41 +257,29 @@ namespace ImGui.NET.SampleProgram {
 
             if(distToEnd <= 0) {
                 inspectorBool = "OOB";
-                analysisBool = false;
             } else {
                 byte b = data[offset];
                 if (b > 1) {
                     inspectorBool = $"!!! (greater than one {(int)b})";
-                    analysisBool = false;
                 }
                 else {
                     inspectorBool = b == 1 ? "True" : "False";
-                    analysisBool = true;
                 }
 
             }
 
 
             if(distToEnd < 4) {
-                inspectorInt = "OOB"; analysisInt = false;
-                inspectorFloat = "OOB"; analysisFloat = false;
+                inspectorInt = "OOB";
+                inspectorFloat = "OOB";
             } else {
                 int intValue = BitConverter.ToInt32(data, offset);
                 inspectorInt = intValue.ToString();
-                analysisInt = true;
 
                 float floatValue = BitConverter.ToSingle(data, offset);
-                analysisFloat = AnalyseFloat(floatValue);
                 inspectorFloat = floatValue.ToString();
             }
 
-            analysisString = false;
-            analysisRef = false;
-            analysisIntArray = false;
-            analysisFloatArray = false;
-            analysisStringArray = false;
-            analysisRefArray = false;
-            analysisUnkArray = false;
 
             //8 byte types (string)
             if (distToEnd < 8) {
@@ -301,7 +293,7 @@ namespace ImGui.NET.SampleProgram {
                 } else if (longLower % 2 == 1) {
                     inspectorString = $"OFFSET NOT EVEN {longLower}";
                 } else {
-                    inspectorString = Dat.ReadWStringNullTerminated(varying, (int)longLower); analysisString = true;
+                    inspectorString = Dat.ReadWStringNullTerminated(varying, (int)longLower);
                 }
 
                 //16 byte types
@@ -314,7 +306,6 @@ namespace ImGui.NET.SampleProgram {
                     long longUpper = BitConverter.ToInt64(data, offset + 8); //if less than 16 bytes from end of data
                     if (longLower == -72340172838076674 && longUpper == -72340172838076674) {
                         inspectorRef = "null";
-                        analysisRef = true;
                     } else if (longUpper != 0) {
                         inspectorRef = $"bytes 8-16 non zero {longUpper}";
                     } else if (longLower < 0) { 
@@ -322,7 +313,6 @@ namespace ImGui.NET.SampleProgram {
                     }else if (longLower >= maxRows) {
                         inspectorRef = $"row index too large {longLower})";
                     } else {
-                        analysisRef = true;
                         inspectorRefValue = (int)longLower;
                         inspectorRef = longLower.ToString();
                     }
@@ -345,7 +335,6 @@ namespace ImGui.NET.SampleProgram {
                         else {
                             StringBuilder s = new StringBuilder("[");
                             inspectorUnkArray = MakeArrayString("?", (int)longLower);
-                            analysisUnkArray = true;
                         }
 
                         //4 byte array
@@ -353,8 +342,6 @@ namespace ImGui.NET.SampleProgram {
                             inspectorIntArray = $"no room for {longLower} ints";
                             inspectorFloatArray = $"no room for {longLower} floats";
                         } else {
-                            analysisIntArray = true;
-                            analysisFloatArray = false;
 
                             int[] ints = new int[longLower];
                             float[] floats = new float[longLower];
@@ -362,7 +349,6 @@ namespace ImGui.NET.SampleProgram {
                             for (int i = 0; i < longLower; i++) {
                                 ints[i] = BitConverter.ToInt32(varying, (int)longUpper + 4 * i);
                                 float f = BitConverter.ToSingle(varying, (int)longUpper + 4 * i);
-                                if (!AnalyseFloat(f)) analysisFloatArray = false;
                                 floats[i] = f;
                             }
                             inspectorIntArray = MakeArrayString(ints);
@@ -373,13 +359,11 @@ namespace ImGui.NET.SampleProgram {
                         if (lengthToEnd < longLower * 8) {
                             inspectorStringArray = $"no room for {longLower} string offsets";
                         } else {
-                            analysisStringArray = true;
                             string[] strings = new string[longLower];
                             for (int i = 0; i < longLower; i++) {
                                 long strOffset = BitConverter.ToInt64(varying, (int)longUpper + 8 * i);
                                 if (strOffset < 0 || strOffset + 1 >= varying.Length) {
                                     strings[i] = $"OOB {strOffset}";
-                                    analysisStringArray = false;
                                 } else {
                                     strings[i] = Dat.ReadWStringNullTerminated(varying, (int)strOffset);
                                 }
@@ -392,7 +376,6 @@ namespace ImGui.NET.SampleProgram {
                         if (lengthToEnd < longLower * 16) {
                             inspectorRefArray = $"no room for {longLower} refs";
                         } else {
-                            analysisRefArray = true;
                             inspectorRefArrayValues = new List<int>();
 
                             string[] refs = new string[longLower];
@@ -402,13 +385,10 @@ namespace ImGui.NET.SampleProgram {
                                 if (refLower == -72340172838076674 && refUpper == -72340172838076674) {
                                     refs[i] = "null"; //TODO why would there be null values in array?
                                 } else if (refUpper != 0) {
-                                    analysisRefArray = false;
                                     refs[i] = $"bytes 8-16 non zero {refUpper}";
                                 } else if (refLower < 0) {
-                                    analysisRefArray = false;
                                     refs[i] = $"negative row index {refLower}";
                                 } else if (refLower > maxRows) {
-                                    analysisRefArray = false;
                                     refs[i] = $"row index too large {refLower})";
                                 } else {
                                     refs[i] = refLower.ToString();
@@ -417,9 +397,7 @@ namespace ImGui.NET.SampleProgram {
                             }
                             inspectorRefArray = MakeArrayString(refs);
                         }
-
                     }
-
                 }
             }
         }
@@ -585,23 +563,22 @@ namespace ImGui.NET.SampleProgram {
 
                     //INSPECTOR
                     Text("Inspector");
-                    if(BeginTable("Inspector", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit)) {
-                        InspectorRow("Int", inspectorInt, analysisInt);
-                        InspectorRow("Bool", inspectorBool, analysisBool);
-                        InspectorRow("Float", inspectorFloat, analysisFloat);
-                        InspectorRow("String", inspectorString, analysisString);
-                        InspectorRow("Reference", inspectorRef, analysisRef);
-                        InspectorRow("Int Array", inspectorIntArray, analysisIntArray);
-                        InspectorRow("Float Array", inspectorFloatArray, analysisFloatArray);
-                        InspectorRow("String Array", inspectorStringArray, analysisStringArray);
-                        InspectorRow("Ref Array", inspectorRefArray, analysisRefArray);
-                        InspectorRow("Unknown Array", inspectorUnkArray, analysisUnkArray);
+                    if (BeginTable("Inspector", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit)) {
+                        InspectorRow("Ref Array", inspectorRefArray, tempAnalysis.isRefArray.ToString(), tempAnalysis.isRefArray == Analysis.Error.NONE);
+                        InspectorRow("String Array", inspectorStringArray, tempAnalysis.isStringArray.ToString(), tempAnalysis.isStringArray == Analysis.Error.NONE);
+                        InspectorRow("Float Array", inspectorFloatArray, tempAnalysis.isFloatArray.ToString(), tempAnalysis.isFloatArray == Analysis.Error.NONE);
+                        InspectorRow("Int Array", inspectorIntArray, tempAnalysis.isIntArray.ToString(), tempAnalysis.isIntArray == Analysis.Error.NONE);
+                        InspectorRow("Unknown Array", inspectorUnkArray, tempAnalysis.isArray.ToString(), tempAnalysis.isArray == Analysis.Error.NONE);
+                        InspectorRow("Reference", inspectorRef, tempAnalysis.isRef.ToString(), tempAnalysis.isRef == Analysis.Error.NONE);
+                        InspectorRow("String", inspectorString, tempAnalysis.isString.ToString(), tempAnalysis.isString == Analysis.Error.NONE);
+                        InspectorRow("Float", inspectorFloat, tempAnalysis.isFloat.ToString(), tempAnalysis.isFloat == Analysis.Error.NONE);
+                        InspectorRow("Bool", inspectorBool, tempAnalysis.isBool.ToString(), tempAnalysis.isBool == Analysis.Error.NONE);
+                        InspectorRow("Int", inspectorInt, tempAnalysis.isInt.ToString(), tempAnalysis.isInt == Analysis.Error.NONE);
                         EndTable();
                     }
 
-
-                    bool showRefValues = analysisRef && inspectorRefValue >= 0;
-                    bool showRefArrayValues = analysisRefArray && inspectorRefArrayValues.Count > 0;
+                    bool showRefValues = tempAnalysis.isRef == Analysis.Error.NONE && inspectorRefValue >= 0;
+                    bool showRefArrayValues = tempAnalysis.isRefArray == Analysis.Error.NONE && inspectorRefArrayValues != null && inspectorRefArrayValues.Count > 0;
                     if (showRefValues || showRefArrayValues) {
 
                         bool core = schema.tableFiles[titleCaseDatFileSelected] == "_Core";
@@ -628,15 +605,11 @@ namespace ImGui.NET.SampleProgram {
                     }
 
                     if (showRefArrayValues) {
-                        int maxRow = 0;
-                        for(int i = 0; i < inspectorRefArrayValues.Count; i++)
-                            if (inspectorRefArrayValues[i] > maxRow)
-                                maxRow = inspectorRefArrayValues[i];
 
                         //TODO shouldn't be building these strings every frame lol
                         if (BeginTable("Array Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                             for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
-                                if (datRowCount[i] > maxRow) {
+                                if (datRowCount[i] > tempAnalysis.maxRefArray) {
                                     string table = datFileListSortedByRowCount[i];
                                     if (possibleRefFilter.Length > 0 && !table.Contains(possibleRefFilter)) continue;
                                     if (lowercaseToTitleCaseDats.ContainsKey(table)) {
@@ -685,7 +658,7 @@ namespace ImGui.NET.SampleProgram {
                     if (showRefValues) {
                         if (BeginTable("Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                             for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
-                                if (datRowCount[i] > inspectorRefValue) {
+                                if (datRowCount[i] > tempAnalysis.maxRef) {
                                     string table = datFileListSortedByRowCount[i];
                                     if (possibleRefFilter.Length > 0 && !table.Contains(possibleRefFilter)) continue;
                                     if (lowercaseToTitleCaseDats.ContainsKey(table)) {
@@ -735,12 +708,12 @@ namespace ImGui.NET.SampleProgram {
             inspectorUnkArray = s;
         }
 
-        void InspectorRow(string label, string value, bool analysis) {
+        void InspectorRow(string label, string value, string tooltip, bool analysis) {
             if (value == null) return;
             TableNextRow();
             if (!analysis) TableSetBgColor(ImGuiTableBgTarget.RowBg0, GetColorU32(new System.Numerics.Vector4(1, 0, 0, 0.2f)));
-            TableSetColumnIndex(0); Text(label);
-            TableSetColumnIndex(1); Text(value);
+            TableSetColumnIndex(0); Text(label); SetItemTooltip(tooltip);
+            TableSetColumnIndex(1); Text(value); SetItemTooltip(tooltip);
         }
     }
 }
