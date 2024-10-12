@@ -3,6 +3,8 @@ using System;
 
 namespace ImGui.NET.SampleProgram {
     struct Analysis {
+        static int arrayMaxCount = 265;
+
         [Flags] public enum Error : ushort {
             NONE = 0,
 
@@ -116,12 +118,12 @@ namespace ImGui.NET.SampleProgram {
                 //arrays
                 if (arrayCount < 0)
                     isArray = isArray | Error.COUNT_TOO_SMALL;
-                else if (arrayCount > 200)
+                else if (arrayCount > arrayMaxCount)
                     isArray = isArray | Error.COUNT_TOO_BIG;
                 else if (arrayOffset < 0)
                     isArray = isArray | Error.OFFSET_TOO_SMALL;
                 else if (arrayCount > 0) {
-                    int arrayDistToEnd = varying.Length - (int)arrayOffset;
+                    long arrayDistToEnd = varying.Length - arrayOffset;
                     if(arrayDistToEnd <= 0) 
                         isArray = isArray | Error.OFFSET_TOO_BIG;
                     
