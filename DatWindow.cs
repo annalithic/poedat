@@ -69,7 +69,7 @@ namespace ImGui.NET.SampleProgram {
         string possibleRefFilter = "";
         string possibleRefValueFilter = "";
 
-        Analysis[] columnAnalysis;
+        DatAnalysis[] columnAnalysis;
 
         string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {
             if (start + length > b.Length) length = b.Length - start;
@@ -230,9 +230,9 @@ namespace ImGui.NET.SampleProgram {
                 rowBytes[i] = ToHexSpaced(dat.Row(i));
             }
 
-            columnAnalysis = new Analysis[tableColumns.Count];
+            columnAnalysis = new DatAnalysis[tableColumns.Count];
             for(int i = 0; i < columnAnalysis.Length; i++) {
-                columnAnalysis[i] = new Analysis(dat, tableColumns[i].offset, maxRows);
+                columnAnalysis[i] = new DatAnalysis(dat, tableColumns[i].offset, maxRows);
             }
 
             selectedRow = -1;
@@ -495,24 +495,24 @@ namespace ImGui.NET.SampleProgram {
                                 if (column.type != Schema.Column.Type.Byte)
                                     Checkbox("##byte", ref columnByteMode[i]);
                                 //SameLine();
-                                Analysis an = columnAnalysis[i];
+                                DatAnalysis an = columnAnalysis[i];
                                 bool rowAnalysisFailure = false;
                                 if (column.array) {
                                     switch (column.type) {
-                                        case (Schema.Column.Type.Unknown): rowAnalysisFailure = an.isArray       != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.i32):     rowAnalysisFailure = an.isIntArray    != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.f32):     rowAnalysisFailure = an.isFloatArray  != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.@string): rowAnalysisFailure = an.isStringArray != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.rid):     rowAnalysisFailure = an.isRefArray    != Analysis.Error.NONE; break;
+                                        case (Schema.Column.Type.Unknown): rowAnalysisFailure = an.isArray       != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.i32):     rowAnalysisFailure = an.isIntArray    != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.f32):     rowAnalysisFailure = an.isFloatArray  != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.@string): rowAnalysisFailure = an.isStringArray != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.rid):     rowAnalysisFailure = an.isRefArray    != DatAnalysis.Error.NONE; break;
                                         default: break;
                                     }
                                 } else {
                                     switch (column.type) {
-                                        case (Schema.Column.Type.@bool):   rowAnalysisFailure = an.isBool   != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.i32):     rowAnalysisFailure = an.isInt    != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.f32):     rowAnalysisFailure = an.isFloat  != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.@string): rowAnalysisFailure = an.isString != Analysis.Error.NONE; break;
-                                        case (Schema.Column.Type.rid):     rowAnalysisFailure = an.isRef    != Analysis.Error.NONE; break;
+                                        case (Schema.Column.Type.@bool):   rowAnalysisFailure = an.isBool   != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.i32):     rowAnalysisFailure = an.isInt    != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.f32):     rowAnalysisFailure = an.isFloat  != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.@string): rowAnalysisFailure = an.isString != DatAnalysis.Error.NONE; break;
+                                        case (Schema.Column.Type.rid):     rowAnalysisFailure = an.isRef    != DatAnalysis.Error.NONE; break;
                                         default: break;
                                     }
                                 }
@@ -599,26 +599,26 @@ namespace ImGui.NET.SampleProgram {
                     }
                     if(selectedColumn != -1) {
                         //INSPECTOR
-                        Analysis tempAnalysis = columnAnalysis[selectedColumn];
+                        DatAnalysis tempAnalysis = columnAnalysis[selectedColumn];
 
                         Text("Inspector");
                         if (BeginTable("Inspector", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit)) {
 
-                            InspectorRow("Ref Array", inspectorRefArray, tempAnalysis.isRefArray.ToString(), tempAnalysis.isRefArray == Analysis.Error.NONE);
-                            InspectorRow("String Array", inspectorStringArray, tempAnalysis.isStringArray.ToString(), tempAnalysis.isStringArray == Analysis.Error.NONE);
-                            InspectorRow("Float Array", inspectorFloatArray, tempAnalysis.isFloatArray.ToString(), tempAnalysis.isFloatArray == Analysis.Error.NONE);
-                            InspectorRow("Int Array", inspectorIntArray, tempAnalysis.isIntArray.ToString(), tempAnalysis.isIntArray == Analysis.Error.NONE);
-                            InspectorRow("Unknown Array", inspectorUnkArray, tempAnalysis.isArray.ToString(), tempAnalysis.isArray == Analysis.Error.NONE);
-                            InspectorRow("Reference", inspectorRef, tempAnalysis.isRef.ToString(), tempAnalysis.isRef == Analysis.Error.NONE);
-                            InspectorRow("String", inspectorString, tempAnalysis.isString.ToString(), tempAnalysis.isString == Analysis.Error.NONE);
-                            InspectorRow("Float", inspectorFloat, tempAnalysis.isFloat.ToString(), tempAnalysis.isFloat == Analysis.Error.NONE);
-                            InspectorRow("Bool", inspectorBool, tempAnalysis.isBool.ToString(), tempAnalysis.isBool == Analysis.Error.NONE);
-                            InspectorRow("Int", inspectorInt, tempAnalysis.isInt.ToString(), tempAnalysis.isInt == Analysis.Error.NONE);
+                            InspectorRow("Ref Array", inspectorRefArray, tempAnalysis.isRefArray.ToString(), tempAnalysis.isRefArray == DatAnalysis.Error.NONE);
+                            InspectorRow("String Array", inspectorStringArray, tempAnalysis.isStringArray.ToString(), tempAnalysis.isStringArray == DatAnalysis.Error.NONE);
+                            InspectorRow("Float Array", inspectorFloatArray, tempAnalysis.isFloatArray.ToString(), tempAnalysis.isFloatArray == DatAnalysis.Error.NONE);
+                            InspectorRow("Int Array", inspectorIntArray, tempAnalysis.isIntArray.ToString(), tempAnalysis.isIntArray == DatAnalysis.Error.NONE);
+                            InspectorRow("Unknown Array", inspectorUnkArray, tempAnalysis.isArray.ToString(), tempAnalysis.isArray == DatAnalysis.Error.NONE);
+                            InspectorRow("Reference", inspectorRef, tempAnalysis.isRef.ToString(), tempAnalysis.isRef == DatAnalysis.Error.NONE);
+                            InspectorRow("String", inspectorString, tempAnalysis.isString.ToString(), tempAnalysis.isString == DatAnalysis.Error.NONE);
+                            InspectorRow("Float", inspectorFloat, tempAnalysis.isFloat.ToString(), tempAnalysis.isFloat == DatAnalysis.Error.NONE);
+                            InspectorRow("Bool", inspectorBool, tempAnalysis.isBool.ToString(), tempAnalysis.isBool == DatAnalysis.Error.NONE);
+                            InspectorRow("Int", inspectorInt, tempAnalysis.isInt.ToString(), tempAnalysis.isInt == DatAnalysis.Error.NONE);
                             EndTable();
                         }
 
-                        bool showRefValues = tempAnalysis.isRef == Analysis.Error.NONE && inspectorRefValue >= 0;
-                        bool showRefArrayValues = tempAnalysis.isRefArray == Analysis.Error.NONE && inspectorRefArrayValues != null && inspectorRefArrayValues.Count > 0;
+                        bool showRefValues = tempAnalysis.isRef == DatAnalysis.Error.NONE && inspectorRefValue >= 0;
+                        bool showRefArrayValues = tempAnalysis.isRefArray == DatAnalysis.Error.NONE && inspectorRefArrayValues != null && inspectorRefArrayValues.Count > 0;
                         if (showRefValues || showRefArrayValues) {
 
                             bool core = schema.tableFiles[titleCaseDatFileSelected] == "_Core";
