@@ -9,7 +9,7 @@ using System.Collections.Generic;
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
 
-        string startupDat = "monsterdeathachievements";
+        string startupDat = "characterstartqueststate";
 
         string datFolder = @"E:\Extracted\PathOfExile\3.25.Settlers\data";
         string failText = null;
@@ -328,7 +328,7 @@ namespace ImGui.NET.SampleProgram {
                         SetInspectorArrayValues($"negative count {longLower}");
                     }  else if(longUpper < 0) {
                         SetInspectorArrayValues($"negative offset {longUpper}");
-                    } else if (longLower > 200) {
+                    } else if (longLower > DatAnalysis.arrayMaxCount) {
                         SetInspectorArrayValues($"array size implausibly big {longLower}");
                     } else {
                         long lengthToEnd = varying.Length - longUpper;
@@ -490,36 +490,17 @@ namespace ImGui.NET.SampleProgram {
                                 TableSetColumnIndex(i + 1);
                                 string columnName = TableGetColumnName(i + 1);
                                 PushID(i);
-                                Schema.Column column = tableColumns[i];
+                                var column = tableColumns[i];
 
                                 if (column.type != Schema.Column.Type.Byte)
                                     Checkbox("##byte", ref columnByteMode[i]);
                                 //SameLine();
                                 DatAnalysis an = columnAnalysis[i];
-                                bool rowAnalysisFailure = false;
-                                if (column.array) {
-                                    switch (column.type) {
-                                        case (Schema.Column.Type.Unknown): rowAnalysisFailure = an.isArray       != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.i32):     rowAnalysisFailure = an.isIntArray    != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.f32):     rowAnalysisFailure = an.isFloatArray  != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.@string): rowAnalysisFailure = an.isStringArray != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.rid):     rowAnalysisFailure = an.isRefArray    != DatAnalysis.Error.NONE; break;
-                                        default: break;
-                                    }
-                                } else {
-                                    switch (column.type) {
-                                        case (Schema.Column.Type.@bool):   rowAnalysisFailure = an.isBool   != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.i32):     rowAnalysisFailure = an.isInt    != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.f32):     rowAnalysisFailure = an.isFloat  != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.@string): rowAnalysisFailure = an.isString != DatAnalysis.Error.NONE; break;
-                                        case (Schema.Column.Type.rid):     rowAnalysisFailure = an.isRef    != DatAnalysis.Error.NONE; break;
-                                        default: break;
-                                    }
-                                }
+                                bool error = an.GetError(column) != DatAnalysis.Error.NONE;
 
-                                if(rowAnalysisFailure) PushStyleColor(ImGuiCol.TableHeaderBg, GetColorU32(new System.Numerics.Vector4(1, 0, 0, 0.2f)));
+                                if (error) PushStyleColor(ImGuiCol.TableHeaderBg, GetColorU32(new System.Numerics.Vector4(1, 0, 0, 0.2f)));
                                 TableHeader(columnName);
-                                if(rowAnalysisFailure) PopStyleColor();
+                                if(error) PopStyleColor();
                                 PopID();
                             }
                             //TableHeadersRow();
