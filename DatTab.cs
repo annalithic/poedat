@@ -38,6 +38,9 @@ namespace ImGui.NET.SampleProgram {
 
         int maxRows;
 
+        public override string ToString() {
+            return name;
+        }
 
         public DatTab(string tableName, string schemaText, string datPath, Schema schema, Dictionary<string, string[]> rowIds, int maxRows) {
             name = tableName;

@@ -223,12 +223,12 @@ namespace ImGuiNET
             long allocBytesStringStart = GC.GetAllocatedBytesForCurrentThread();
             ImGui.Text($"Hello, world {Random.Shared.Next(100)}!");
             long allocBytesStringEnd = GC.GetAllocatedBytesForCurrentThread() - allocBytesStringStart;
-            Console.WriteLine("GC (string): " + allocBytesStringEnd);
+            //Console.WriteLine("GC (string): " + allocBytesStringEnd);
                 
             long allocBytesSpanStart = GC.GetAllocatedBytesForCurrentThread();
             ImGui.Text($"Hello, world {Random.Shared.Next(100)}!".AsSpan()); // Note that this call will STILL allocate memory due to string interpolation, but you can prevent that from happening by using an InterpolatedStringHandler.
             long allocBytesSpanEnd = GC.GetAllocatedBytesForCurrentThread() - allocBytesSpanStart;
-            Console.WriteLine("GC (span): " + allocBytesSpanEnd);
+            //Console.WriteLine("GC (span): " + allocBytesSpanEnd);
             
             ImGui.Text("Empty span:");
             ImGui.SameLine();

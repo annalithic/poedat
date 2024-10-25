@@ -17,6 +17,9 @@ namespace ImGui.NET.SampleProgram {
         Schema schema;
 
         List<string> datFileList;
+        Dictionary<string, int> datNameIndices;
+        DatTab[] dats;
+
         int[] datRowCount;
         string[] datFileListSortedByRowCount;
 
@@ -37,17 +40,16 @@ namespace ImGui.NET.SampleProgram {
         string possibleRefFilter = "";
         string possibleRefValueFilter = "";
 
-        List<DatTab> dats;
-        DatTab currentDat;
-
-
-
         public DatWindow(string path) {
-            dats = new List<DatTab>();
             datFileList = new List<string>();
+            datNameIndices = new Dictionary<string, int>();
             foreach(string datPath in Directory.EnumerateFiles(datFolder, "*.dat64")) {
-                datFileList.Add(Path.GetFileNameWithoutExtension(datPath));
+                string datName = Path.GetFileNameWithoutExtension(datPath);
+                datNameIndices[datName] = datFileList.Count;
+                datFileList.Add(datName);
             }
+            dats = new DatTab[datFileList.Count];
+
 
             schemaText = Schema.SplitGqlTypes(@"E:\Projects2\dat-schema\dat-schema");
             lowercaseToTitleCaseDats = new Dictionary<string, string>();
@@ -101,25 +103,11 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void SelectDat(string name, bool reload = false) {
-            for (int i = 0; i < datFileList.Count; i++) {
-                if (datFileList[i] == name) {
-                    datFileSelected = i;
-                    break;
-                }
+            if (!datNameIndices.ContainsKey(name)) name = name.ToLower();
+            datFileSelected = datNameIndices[name];
+            if (reload || dats[datFileSelected] == null) {
+                dats[datFileSelected] = LoadDat(name);
             }
-            for (int i = 0; i < dats.Count; i++) {
-                var dat = dats[i];
-                if (dat.name == name || dat.nameLower == name) {
-                    if(reload) {
-                        currentDat = LoadDat(name);
-                        if(currentDat != null) dats[i] = currentDat;
-                    } else currentDat = dat;
-                    return;
-                }
-            }
-            currentDat = LoadDat(name);
-            if(currentDat != null) 
-                dats.Add(currentDat);
         }
 
         DatTab LoadDat(string filename) {
@@ -151,12 +139,12 @@ namespace ImGui.NET.SampleProgram {
         public unsafe void Update() {
 
             if (BeginTable("MAIN", 3)) {
+
                 TableSetupColumn("Dat Files", ImGuiTableColumnFlags.WidthFixed, 256);
                 TableSetupColumn("Data", ImGuiTableColumnFlags.WidthStretch);
                 TableSetupColumn("Schema", ImGuiTableColumnFlags.WidthFixed, 512);
                 TableHeadersRow();
                 TableNextRow();
-
 
                 //DAT FILES
                 TableSetColumnIndex(0);
@@ -179,28 +167,28 @@ namespace ImGui.NET.SampleProgram {
                 }
 
                 TableSetColumnIndex(1);
-                if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.AutoSelectNewTabs | ImGuiTabBarFlags.Reorderable)) {
-                    for(int i = 0; i < dats.Count; i++) {
+                if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable | ImGuiTabBarFlags.AutoSelectNewTabs)) {
+                    for(int i = 0; i < datFileList.Count; i++) {
                         var dat = dats[i];
+                        if (dat == null) continue;
+
                         bool open = true;
                         if(BeginTabItem(dat.name, ref open)) {
-                            if(currentDat != dat) SelectDat(dat.name);
-                            DatTable(currentDat);
+                            if(datFileSelected != i) {
+                                datFileSelected = i;
+                            }
+                            DatTable(dat);
                             EndTabItem();
-                            
                         }
                         if(!open) {
-                            dats.RemoveAt(i);
-                            currentDat = null;
-                            i--;
+                            dats[i] = null;
                         }
                     }
 
                     EndTabBar();
                 }
 
-                
-                if(currentDat != null) {
+                if(dats[datFileSelected] != null) {
                     //DATA
                     TableSetColumnIndex(1);
                     if (failText == null) {
@@ -211,7 +199,7 @@ namespace ImGui.NET.SampleProgram {
 
                     //SCHEMA
                     TableSetColumnIndex(2);
-                    DatInspector(currentDat);
+                    DatInspector(dats[datFileSelected]);
                 }
                 
                 EndTable();
@@ -327,8 +315,6 @@ namespace ImGui.NET.SampleProgram {
             if (dat.selectedColumn != -1) {
                 //INSPECTOR
                 DatAnalysis tempAnalysis = dat.columnAnalysis[dat.selectedColumn];
-                Text(tempAnalysis.maxRef.ToString());
-                Text(tempAnalysis.maxRefArray.ToString());
                 Text("Inspector");
                 if (BeginTable("Inspector", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit)) {
 
@@ -457,12 +443,6 @@ namespace ImGui.NET.SampleProgram {
                     }
                 }
             }
-
-
-            //Text(selectedColumn.ToString());
-            //Text(selectedRow.ToString());
-            
-
         }
 
         void InspectorRow(string label, string value, string tooltip, bool analysis) {
