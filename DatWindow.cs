@@ -9,7 +9,7 @@ using System.Collections.Generic;
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
 
-        string startupDat = "characterstartqueststate";
+        string startupDat = "acts";
 
         string datFolder = @"E:\Extracted\PathOfExile\3.25.Settlers\data";
         string failText = null;
@@ -99,7 +99,14 @@ namespace ImGui.NET.SampleProgram {
             schema.ParseGql(r);
             string fileTitleCase = lowercaseToTitleCaseDats[datFileList[datFileSelected]];
             schemaText[fileTitleCase] = text;
-            SelectDat(datFileList[datFileSelected], true); //TODO this is pretty wasteful
+            SelectDat(datFileSelected, true); //TODO this is pretty wasteful
+        }
+
+        void SelectDat(int index, bool reload = false) {
+            datFileSelected = index;
+            if (reload || dats[datFileSelected] == null) {
+                dats[datFileSelected] = LoadDat(datFileList[index]);
+            }
         }
 
         void SelectDat(string name, bool reload = false) {
@@ -112,19 +119,9 @@ namespace ImGui.NET.SampleProgram {
 
         DatTab LoadDat(string filename) {
             if (!schema.schema.ContainsKey(filename)) return null;
-
-            if (datFileList[datFileSelected] != filename) {
-                SelectDat(filename);
-            }
-
             string tableName = lowercaseToTitleCaseDats.ContainsKey(filename) ? lowercaseToTitleCaseDats[filename] : filename;
-            
             string tableSchema = schemaText.ContainsKey(tableName) ? schemaText[tableName] : "";
-
             string datPath = Path.Combine(datFolder, filename + ".dat64");
-            //if (!File.Exists(datPath)) {
-            //    failText = $"{datPath} does not exist"; return;
-            //}
             DatTab dat = new DatTab(tableName, tableSchema, datPath, schema, rowIds, maxRows);
             return dat;
         }
@@ -137,7 +134,6 @@ namespace ImGui.NET.SampleProgram {
 
 
         public unsafe void Update() {
-
             if (BeginTable("MAIN", 3)) {
 
                 TableSetupColumn("Dat Files", ImGuiTableColumnFlags.WidthFixed, 256);
@@ -145,6 +141,8 @@ namespace ImGui.NET.SampleProgram {
                 TableSetupColumn("Schema", ImGuiTableColumnFlags.WidthFixed, 512);
                 TableHeadersRow();
                 TableNextRow();
+
+                bool selectedTab = false;
 
                 //DAT FILES
                 TableSetColumnIndex(0);
@@ -155,8 +153,8 @@ namespace ImGui.NET.SampleProgram {
 
                         if (Selectable(datFileList[i], isSelected)) {
                             if(datFileSelected != i) {
-                                //datFileSelected = i;
-                                SelectDat(datFileList[i]);
+                                SelectDat(i);
+                                selectedTab = true;
                             }
 
                         }
@@ -167,14 +165,18 @@ namespace ImGui.NET.SampleProgram {
                 }
 
                 TableSetColumnIndex(1);
-                if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable | ImGuiTabBarFlags.AutoSelectNewTabs)) {
-                    for(int i = 0; i < datFileList.Count; i++) {
+                if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable)) {
+                    //if (closeTab != null) SetTabItemClosed(closeTab);
+
+                    for (int i = 0; i < datFileList.Count; i++) {
                         var dat = dats[i];
                         if (dat == null) continue;
 
                         bool open = true;
-                        if(BeginTabItem(dat.name, ref open)) {
-                            if(datFileSelected != i) {
+                        ImGuiTabItemFlags flags = selectedTab && datFileSelected == i ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+                        if (BeginTabItem(dat.name, ref open, flags)) {
+                            if (!selectedTab && datFileSelected != i) {
+                                //SetTabItemClosed(dat.name);
                                 datFileSelected = i;
                             }
                             DatTable(dat);
@@ -204,7 +206,6 @@ namespace ImGui.NET.SampleProgram {
                 
                 EndTable();
             }
-
         }
 
         unsafe void DatTable(DatTab dat) {
