@@ -9,7 +9,7 @@ using System.Collections.Generic;
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
 
-        string startupDat = "acts";
+        string startupDat = "aegisvariations";
 
         string datFolder = @"E:\Extracted\PathOfExile\3.25.Settlers\data";
         string failText = null;
@@ -39,6 +39,9 @@ namespace ImGui.NET.SampleProgram {
 
         string possibleRefFilter = "";
         string possibleRefValueFilter = "";
+
+        string selectDat;
+        int selectRow = -1;
 
         public DatWindow(string path) {
             datFileList = new List<string>();
@@ -103,6 +106,7 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void SelectDat(int index, bool reload = false) {
+            Console.WriteLine($"SELECTING {datFileList[index]} BY INDEX");
             datFileSelected = index;
             if (reload || dats[datFileSelected] == null) {
                 dats[datFileSelected] = LoadDat(datFileList[index]);
@@ -110,6 +114,7 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void SelectDat(string name, bool reload = false) {
+            Console.WriteLine($"SELECTING {name} BY NAME");
             if (!datNameIndices.ContainsKey(name)) name = name.ToLower();
             datFileSelected = datNameIndices[name];
             if (reload || dats[datFileSelected] == null) {
@@ -142,7 +147,22 @@ namespace ImGui.NET.SampleProgram {
                 TableHeadersRow();
                 TableNextRow();
 
+                //TODO can we close tab to fix flashing?
                 bool selectedTab = false;
+                if (selectDat != null) {
+                    if (selectDat == "_SELECTED_") {
+                        selectDat = null;
+                    } else {
+                        SelectDat(selectDat);
+                        selectDat = "_SELECTED_";
+                        selectedTab = true;
+                        if (selectRow != -1) {
+                            var dat = dats[datFileSelected];
+                            dat.selectedRow = selectRow;
+                        }
+                    }
+                }
+
 
                 //DAT FILES
                 TableSetColumnIndex(0);
@@ -150,7 +170,7 @@ namespace ImGui.NET.SampleProgram {
                 if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, 1024))) {
                     for (int i = 0; i < datFileList.Count; i++) { 
                         bool isSelected = datFileSelected == i;
-
+                       
                         if (Selectable(datFileList[i], isSelected)) {
                             if(datFileSelected != i) {
                                 SelectDat(i);
@@ -166,8 +186,6 @@ namespace ImGui.NET.SampleProgram {
 
                 TableSetColumnIndex(1);
                 if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable)) {
-                    //if (closeTab != null) SetTabItemClosed(closeTab);
-
                     for (int i = 0; i < datFileList.Count; i++) {
                         var dat = dats[i];
                         if (dat == null) continue;
@@ -206,6 +224,7 @@ namespace ImGui.NET.SampleProgram {
                 
                 EndTable();
             }
+
         }
 
         unsafe void DatTable(DatTab dat) {
@@ -246,8 +265,16 @@ namespace ImGui.NET.SampleProgram {
                 //TableHeadersRow();
                 var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
                 clipper.Begin(dat.dat.rowCount);
+                if (selectRow != -1 && selectDat == null) {
+                    clipper.IncludeItemByIndex(selectRow);
+                }
                 while (clipper.Step()) {
                     for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                        if(row == selectRow && selectDat == null) {
+                            SetScrollHereY();
+                            selectRow = -1;
+                        }
+
                         TableNextRow();
                         TableSetColumnIndex(0);
                         if (dat.selectedRow == row) TableSetBgColor(ImGuiTableBgTarget.RowBg0, GetColorU32(new System.Numerics.Vector4(0.3f, 0.5f, 1, 0.3f)));
@@ -268,7 +295,6 @@ namespace ImGui.NET.SampleProgram {
                                 PushID(row * dat.tableColumns.Count + col);
                                 if (isZero) PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1));
                                 if (Selectable(text, dat.selectedColumn == col && dat.selectedRow == row)) {
-
                                     dat.selectedColumn = col;
                                     dat.selectedRow = row;
                                     dat.Analyse(row, column.offset);
@@ -281,11 +307,25 @@ namespace ImGui.NET.SampleProgram {
 
                                 PushID(row * dat.tableColumns.Count + col);
                                 if (isZero) PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1));
-                                if (Selectable(text, dat.selectedColumn == col && dat.selectedRow == row)) {
+                                if (Selectable(text, dat.selectedColumn == col && dat.selectedRow == row, ImGuiSelectableFlags.AllowDoubleClick)) {
+                                    if (IsMouseDoubleClicked(0)) {
+                                        if (column.type == Schema.Column.Type.rid && column.references != null) {
+                                            selectDat = column.references;
+                                            if(column.array) {
+                                                if(dat.inspectorRefArrayValues.Count > 0) {
+                                                    selectRow = dat.inspectorRefArrayValues[0];
+                                                }
+                                            } else {
+                                                selectRow = dat.inspectorRefValue;
+                                            }
 
-                                    dat.selectedColumn = col;
-                                    dat.selectedRow = row;
-                                    dat.Analyse(row, column.offset);
+
+                                        }
+                                    } else {
+                                        dat.selectedColumn = col;
+                                        dat.selectedRow = row;
+                                        dat.Analyse(row, column.offset);
+                                    }
                                 }
                                 if (isZero) PopStyleColor();
                                 PopID();
@@ -293,6 +333,8 @@ namespace ImGui.NET.SampleProgram {
                         }
                     }
                 }
+
+                clipper.End();
                 EndTable();
 
             }
