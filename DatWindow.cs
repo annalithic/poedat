@@ -9,7 +9,7 @@ using System.Collections.Generic;
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
 
-        string startupDat = "aegisvariations";
+        string startupDat = "activesettings";
 
         string datFolder = @"E:\Extracted\PathOfExile\3.25.Settlers\data";
         string failText = null;
@@ -25,9 +25,6 @@ namespace ImGui.NET.SampleProgram {
 
         int datFileSelected;
 
-        Dictionary<string, string> schemaText;
-
-        Dictionary<string, string> lowercaseToTitleCaseDats;
 
 
         //dat analaysis
@@ -54,9 +51,6 @@ namespace ImGui.NET.SampleProgram {
             dats = new DatTab[datFileList.Count];
 
 
-            schemaText = Schema.SplitGqlTypes(@"E:\Projects2\dat-schema\dat-schema");
-            lowercaseToTitleCaseDats = new Dictionary<string, string>();
-            foreach(string dat in schemaText.Keys) lowercaseToTitleCaseDats[dat.ToLower()] = dat;
 
             schema = new Schema(@"E:\Projects2\dat-schema\dat-schema");
 
@@ -72,18 +66,15 @@ namespace ImGui.NET.SampleProgram {
                 datRowCount[i] = d.rowCount;
                 if (d.rowCount > maxRows) maxRows = d.rowCount;
 
-                if (lowercaseToTitleCaseDats.ContainsKey(datFile)) {
-                    string titleCaseDat = lowercaseToTitleCaseDats[datFile];
-                    if(schema.schema.ContainsKey(titleCaseDat)) {
-                        var columns = schema.schema[titleCaseDat];
-                        if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
-                            rowIds[titleCaseDat] = d.Column(columns[0]);
-                        } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
-                            rowIds[titleCaseDat] = d.Column(columns[1]);
-                        }
+                if(schema.TryGetTable(datFile, out var table)) {
+                    var columns = table.columns;
+                    if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
+                        rowIds[table.name] = d.Column(columns[0]);
+                    } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
+                        rowIds[table.name] = d.Column(columns[1]);
                     }
-                }
 
+                }
             }
 
             Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
@@ -100,13 +91,10 @@ namespace ImGui.NET.SampleProgram {
         void UpdateSchema(string text) {
             Schema.GqlReader r = new Schema.GqlReader(" " + text + " "); //TODO tokeniser doesn't work if start or end are proper characters lol
             schema.ParseGql(r);
-            string fileTitleCase = lowercaseToTitleCaseDats[datFileList[datFileSelected]];
-            schemaText[fileTitleCase] = text;
             SelectDat(datFileSelected, true); //TODO this is pretty wasteful
         }
 
         void SelectDat(int index, bool reload = false) {
-            Console.WriteLine($"SELECTING {datFileList[index]} BY INDEX");
             datFileSelected = index;
             if (reload || dats[datFileSelected] == null) {
                 dats[datFileSelected] = LoadDat(datFileList[index]);
@@ -114,7 +102,6 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void SelectDat(string name, bool reload = false) {
-            Console.WriteLine($"SELECTING {name} BY NAME");
             if (!datNameIndices.ContainsKey(name)) name = name.ToLower();
             datFileSelected = datNameIndices[name];
             if (reload || dats[datFileSelected] == null) {
@@ -123,12 +110,12 @@ namespace ImGui.NET.SampleProgram {
         }
 
         DatTab LoadDat(string filename) {
-            if (!schema.schema.ContainsKey(filename)) return null;
-            string tableName = lowercaseToTitleCaseDats.ContainsKey(filename) ? lowercaseToTitleCaseDats[filename] : filename;
-            string tableSchema = schemaText.ContainsKey(tableName) ? schemaText[tableName] : "";
-            string datPath = Path.Combine(datFolder, filename + ".dat64");
-            DatTab dat = new DatTab(tableName, tableSchema, datPath, schema, rowIds, maxRows);
-            return dat;
+            if (schema.TryGetTable(filename, out var table)) {
+                string datPath = Path.Combine(datFolder, filename.ToLower() + ".dat64");
+                DatTab dat = new DatTab(datPath, table, rowIds, maxRows);
+                return dat;
+            }
+            return null;
         }
 
         bool AnalyseFloat(float f) {
@@ -192,7 +179,7 @@ namespace ImGui.NET.SampleProgram {
 
                         bool open = true;
                         ImGuiTabItemFlags flags = selectedTab && datFileSelected == i ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
-                        if (BeginTabItem(dat.name, ref open, flags)) {
+                        if (BeginTabItem(dat.table.name, ref open, flags)) {
                             if (!selectedTab && datFileSelected != i) {
                                 //SetTabItemClosed(dat.name);
                                 datFileSelected = i;
@@ -202,13 +189,14 @@ namespace ImGui.NET.SampleProgram {
                         }
                         if(!open) {
                             dats[i] = null;
+                            datFileSelected = -1;
                         }
                     }
 
                     EndTabBar();
                 }
 
-                if(dats[datFileSelected] != null) {
+                if(datFileSelected >= 0 && dats[datFileSelected] != null) {
                     //DATA
                     TableSetColumnIndex(1);
                     if (failText == null) {
@@ -351,8 +339,9 @@ namespace ImGui.NET.SampleProgram {
                 }
                 SameLine();
                 if (Button("Reset")) {
-                    string fileTitleCase = lowercaseToTitleCaseDats[datFileList[datFileSelected]];
-                    dat.schemaText = schemaText[fileTitleCase];
+                    //TODO fix reset
+                    //string fileTitleCase = lowercaseToTitleCaseDats[datFileList[datFileSelected]];
+                    //dat.schemaText = schemaText[fileTitleCase];
                 }
             }
             if (dat.selectedColumn != -1) {
@@ -378,7 +367,7 @@ namespace ImGui.NET.SampleProgram {
                 bool showRefArrayValues = tempAnalysis.isRefArray == DatAnalysis.Error.NONE && dat.inspectorRefArrayValues != null && dat.inspectorRefArrayValues.Count > 0;
                 if (showRefValues || showRefArrayValues) {
 
-                    bool core = schema.tableFiles[dat.name] == "_Core";
+                    bool core = dat.table.file == "_Core";
 
                     Text("Possible Refs");
                     SameLine();
@@ -407,18 +396,13 @@ namespace ImGui.NET.SampleProgram {
                     if (BeginTable("Array Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                         for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
                             if (datRowCount[i] > tempAnalysis.maxRefArray) {
-                                string table = datFileListSortedByRowCount[i];
-                                if (possibleRefFilter.Length > 0 && !table.Contains(possibleRefFilter)) continue;
-                                if (lowercaseToTitleCaseDats.ContainsKey(table)) {
-                                    table = lowercaseToTitleCaseDats[table];
+                                string tableName = datFileListSortedByRowCount[i];
+                                if (possibleRefFilter.Length > 0 && !tableName.Contains(possibleRefFilter)) continue;
+
+                                if(schema.TryGetTable(tableName, out var table)) {
                                     if (possibleRefMode == 4) continue;
-                                } else if (possibleRefMode != 4 && possibleRefMode != 0) continue;
-                                if (schema.enums.ContainsKey(table))
-                                    continue;
-                                if (schema.tableFiles.ContainsKey(table)) {
-                                    string file = schema.tableFiles[table];
-                                    bool core = file == "_Core";
-                                    bool sibling = file == schema.tableFiles[dat.name];
+                                    bool core = table.file == "_Core";
+                                    bool sibling = table.file == dat.table.file;
                                     if (possibleRefMode == 1 && !sibling) continue;
                                     if (possibleRefMode == 2 && !core) continue;
                                     if (possibleRefMode == 3 && !sibling && !core) continue;
@@ -426,8 +410,8 @@ namespace ImGui.NET.SampleProgram {
 
                                 StringBuilder s = new StringBuilder("[");
                                 for (int row = 0; row < dat.inspectorRefArrayValues.Count; row++) {
-                                    if (rowIds.ContainsKey(table))
-                                        s.Append(rowIds[table][dat.inspectorRefArrayValues[row]]);
+                                    if (rowIds.ContainsKey(tableName))
+                                        s.Append(rowIds[tableName][dat.inspectorRefArrayValues[row]]);
                                     else
                                         s.Append(dat.inspectorRefArrayValues[row].ToString());
                                     s.Append(", ");
@@ -455,23 +439,19 @@ namespace ImGui.NET.SampleProgram {
                     if (BeginTable("Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                         for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
                             if (datRowCount[i] > tempAnalysis.maxRef) {
-                                string table = datFileListSortedByRowCount[i];
-                                if (possibleRefFilter.Length > 0 && !table.Contains(possibleRefFilter)) continue;
-                                if (lowercaseToTitleCaseDats.ContainsKey(table)) {
-                                    table = lowercaseToTitleCaseDats[table];
+                                string tableName = datFileListSortedByRowCount[i];
+                                if (possibleRefFilter.Length > 0 && !tableName.Contains(possibleRefFilter)) continue;
+
+                                if (schema.TryGetTable(tableName, out var table)) {
                                     if (possibleRefMode == 4) continue;
-                                } else if (possibleRefMode != 4 && possibleRefMode != 0) continue;
-                                if (schema.enums.ContainsKey(table))
-                                    continue;
-                                if (schema.tableFiles.ContainsKey(table)) {
-                                    string file = schema.tableFiles[table];
-                                    bool core = file == "_Core";
-                                    bool sibling = file == schema.tableFiles[dat.name];
+                                    bool core = table.file == "_Core";
+                                    bool sibling = table.file == dat.table.file;
                                     if (possibleRefMode == 1 && !sibling) continue;
                                     if (possibleRefMode == 2 && !core) continue;
                                     if (possibleRefMode == 3 && !sibling && !core) continue;
                                 }
-                                string s = rowIds.ContainsKey(table) ? rowIds[table][dat.inspectorRefValue] : dat.inspectorRefValue.ToString();
+
+                                string s = rowIds.ContainsKey(tableName) ? rowIds[tableName][dat.inspectorRefValue] : dat.inspectorRefValue.ToString();
 
                                 if (possibleRefValueFilter.Length > 0 && !s.ToLower().Contains(possibleRefValueFilter)) continue;
                                 TableNextRow();

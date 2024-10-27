@@ -6,14 +6,14 @@ using System.Text;
 namespace ImGui.NET.SampleProgram {
     public class DatTab {
         public string schemaText;
+
         public Dat dat;
-        public string name;
         public string nameLower;
 
         public int selectedRow;
         public int selectedColumn;
 
-        Schema.Column[] columns;
+        public Schema.Table table;
         public string[][] columnData;
         public List<Schema.Column> tableColumns;
         public string[] rowBytes;
@@ -39,17 +39,18 @@ namespace ImGui.NET.SampleProgram {
         int maxRows;
 
         public override string ToString() {
-            return name;
+            return table.name;
         }
 
-        public DatTab(string tableName, string schemaText, string datPath, Schema schema, Dictionary<string, string[]> rowIds, int maxRows) {
-            name = tableName;
-            nameLower = tableName.ToLower();
-            this.schemaText = schemaText;
+        public DatTab(string datPath, Schema.Table table, Dictionary<string, string[]> rowIds, int maxRows) {
+            nameLower = table.name.ToLower();
+            this.table = table;
+            schemaText = table.ToGQL();
             dat = new Dat(datPath);
             this.maxRows = maxRows;
 
-            columns = schema.schema[name];
+            
+            var columns = table.columns;
             columnData = new string[columns.Length][];
 
             for (int i = 0; i < columns.Length; i++) {
