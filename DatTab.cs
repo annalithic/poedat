@@ -14,12 +14,10 @@ namespace ImGui.NET.SampleProgram {
         public int selectedColumn;
 
         public Schema.Table table;
-        public string[][] columnData;
-        public List<Schema.Column> tableColumns;
-        public string[] rowBytes;
-        public bool[] columnByteMode;
+        public List<TableColumn> cols;
 
-        public DatAnalysis[] columnAnalysis;
+        public string[] rowBytes;
+
 
         //inspector results
         public string inspectorBool;
@@ -38,6 +36,13 @@ namespace ImGui.NET.SampleProgram {
 
         int maxRows;
 
+        public class TableColumn {
+            public Schema.Column column;
+            public DatAnalysis analysis;
+            public string[] values;
+            public bool byteMode;
+        }
+
         public override string ToString() {
             return table.name;
         }
@@ -49,40 +54,34 @@ namespace ImGui.NET.SampleProgram {
             dat = new Dat(datPath);
             this.maxRows = maxRows;
 
-            
-            var columns = table.columns;
-            columnData = new string[columns.Length][];
-
-            for (int i = 0; i < columns.Length; i++) {
-                columnData[i] = dat.Column(columns[i], rowIds);
-            }
-
-            tableColumns = new List<Schema.Column>();
+            cols = new List<TableColumn>();
 
             int byteIndex = 0;
             int columnIndex = 0;
             while (byteIndex < dat.rowWidth) {
-                if (columnIndex < columns.Length && columns[columnIndex].offset == byteIndex) {
-                    var column = columns[columnIndex];
-                    tableColumns.Add(column);
+                if (columnIndex < table.columns.Length && table.columns[columnIndex].offset == byteIndex) {
+                    var column = table.columns[columnIndex];
+                    cols.Add(new TableColumn() {
+                        column = column,
+                        values = dat.Column(column, rowIds),
+                        analysis = new DatAnalysis(dat, column.offset, maxRows)
+                    });
                     columnIndex++;
                     byteIndex += column.Size();
 
                 } else {
-                    tableColumns.Add(new Schema.Column(byteIndex));
+                    cols.Add(new TableColumn() {
+                        column = new Schema.Column(byteIndex),
+                        values = null,
+                        analysis = new DatAnalysis(dat, byteIndex, maxRows)
+                    });
                     byteIndex++;
                 }
             }
-            columnByteMode = new bool[tableColumns.Count];
 
             rowBytes = new string[dat.rowCount];
             for (int i = 0; i < rowBytes.Length; i++) {
                 rowBytes[i] = ToHexSpaced(dat.Row(i));
-            }
-
-            columnAnalysis = new DatAnalysis[tableColumns.Count];
-            for (int i = 0; i < columnAnalysis.Length; i++) {
-                columnAnalysis[i] = new DatAnalysis(dat, tableColumns[i].offset, maxRows);
             }
 
             selectedRow = -1;
