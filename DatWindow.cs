@@ -18,13 +18,11 @@ namespace ImGui.NET.SampleProgram {
 
         List<string> datFileList;
         Dictionary<string, int> datNameIndices;
-        DatTab[] dats;
+        DatTab[] tabs;
+        int selectedTab;
 
         int[] datRowCount;
         string[] datFileListSortedByRowCount;
-
-        int datFileSelected;
-
 
 
         //dat analaysis
@@ -48,7 +46,7 @@ namespace ImGui.NET.SampleProgram {
                 datNameIndices[datName] = datFileList.Count;
                 datFileList.Add(datName);
             }
-            dats = new DatTab[datFileList.Count];
+            tabs = new DatTab[datFileList.Count];
 
 
 
@@ -80,40 +78,34 @@ namespace ImGui.NET.SampleProgram {
             Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
 
             SelectDat(startupDat);
-
-            //rows = new string[Math.Min(dat.rowCount, 10)];
-            //for (int i = 0; i < rows.Length; i++) {
-            //    rows[i] = ToHexSpaced(dat.rows[i]);
-            //}
-
         }
 
         void UpdateSchema(string text) {
             Schema.GqlReader r = new Schema.GqlReader(" " + text + " "); //TODO tokeniser doesn't work if start or end are proper characters lol
             schema.ParseGql(r);
-            SelectDat(datFileSelected, true); //TODO this is pretty wasteful
+            SelectDat(selectedTab, true); //TODO this is pretty wasteful
         }
 
         void SelectDat(int index, bool reload = false) {
-            datFileSelected = index;
-            if (reload || dats[datFileSelected] == null) {
-                dats[datFileSelected] = LoadDat(datFileList[index]);
+            selectedTab = index;
+            if (reload || tabs[selectedTab] == null) {
+                tabs[selectedTab] = LoadDat(datFileList[index]);
             }
         }
 
         void SelectDat(string name, bool reload = false) {
             if (!datNameIndices.ContainsKey(name)) name = name.ToLower();
-            datFileSelected = datNameIndices[name];
-            if (reload || dats[datFileSelected] == null) {
-                dats[datFileSelected] = LoadDat(name);
+            selectedTab = datNameIndices[name];
+            if (reload || tabs[selectedTab] == null) {
+                tabs[selectedTab] = LoadDat(name);
             }
         }
 
         DatTab LoadDat(string filename) {
             if (schema.TryGetTable(filename, out var table)) {
                 string datPath = Path.Combine(datFolder, filename.ToLower() + ".dat64");
-                DatTab dat = new DatTab(datPath, table, rowIds, maxRows);
-                return dat;
+                DatTab tab = new DatTab(datPath, table, rowIds, maxRows);
+                return tab;
             }
             return null;
         }
@@ -138,7 +130,7 @@ namespace ImGui.NET.SampleProgram {
                         selectDat = "_SELECTED_";
                         selectedTab = true;
                         if (selectRow != -1) {
-                            var dat = dats[datFileSelected];
+                            var dat = tabs[this.selectedTab];
                             dat.selectedRow = selectRow;
                         }
                     }
@@ -150,17 +142,14 @@ namespace ImGui.NET.SampleProgram {
                 bool a = true;
                 if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, 1024))) {
                     for (int i = 0; i < datFileList.Count; i++) { 
-                        bool isSelected = datFileSelected == i;
+                        bool isSelected = this.selectedTab == i;
                        
                         if (Selectable(datFileList[i], isSelected)) {
-                            if(datFileSelected != i) {
+                            if(this.selectedTab != i) {
                                 SelectDat(i);
                                 selectedTab = true;
                             }
-
                         }
-
-                           
                     }
                     EndListBox();
                 }
@@ -168,29 +157,28 @@ namespace ImGui.NET.SampleProgram {
                 TableSetColumnIndex(1);
                 if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable)) {
                     for (int i = 0; i < datFileList.Count; i++) {
-                        var dat = dats[i];
+                        var dat = tabs[i];
                         if (dat == null) continue;
 
                         bool open = true;
-                        ImGuiTabItemFlags flags = selectedTab && datFileSelected == i ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+                        ImGuiTabItemFlags flags = selectedTab && this.selectedTab == i ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
                         if (BeginTabItem(dat.table.name, ref open, flags)) {
-                            if (!selectedTab && datFileSelected != i) {
+                            if (!selectedTab && this.selectedTab != i) {
                                 //SetTabItemClosed(dat.name);
-                                datFileSelected = i;
+                                this.selectedTab = i;
                             }
                             DatTable(dat);
                             EndTabItem();
                         }
                         if(!open) {
-                            dats[i] = null;
-                            datFileSelected = -1;
+                            tabs[i] = null;
+                            this.selectedTab = -1;
                         }
                     }
-
                     EndTabBar();
                 }
 
-                if(datFileSelected >= 0 && dats[datFileSelected] != null) {
+                if(this.selectedTab >= 0 && tabs[this.selectedTab] != null) {
                     //DATA
                     TableSetColumnIndex(1);
                     if (failText == null) {
@@ -201,26 +189,25 @@ namespace ImGui.NET.SampleProgram {
 
                     //SCHEMA
                     TableSetColumnIndex(2);
-                    DatInspector(dats[datFileSelected]);
+                    DatInspector(tabs[this.selectedTab]);
                 }
                 
                 EndTable();
             }
-
         }
 
-        unsafe void DatTable(DatTab dat) {
-            if (BeginTable(datFileList[datFileSelected], dat.cols.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersV | ImGuiTableFlags.Resizable)) {
-                TableSetupScrollFreeze(dat.cols[0].column.name == "Id" ? 2 : 1, 1);
+        unsafe void DatTable(DatTab tab) {
+            if (BeginTable(datFileList[selectedTab], tab.cols.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersV | ImGuiTableFlags.Resizable)) {
+                TableSetupScrollFreeze(tab.cols[0].column.name == "Id" ? 2 : 1, 1);
 
                 TableSetupColumn("IDX");
-                for (int i = 0; i < dat.cols.Count; i++) {
-                    var column = dat.cols[i].column;
+                for (int i = 0; i < tab.cols.Count; i++) {
+                    var column = tab.cols[i].column;
                     //TODO garbage
                     if (column.type == Schema.Column.Type.Byte) {
                         TableSetupColumn(column.offset.ToString(), ImGuiTableColumnFlags.NoResize, 14);
                     } else {
-                        if (dat.cols[i].byteMode) {
+                        if (tab.cols[i].byteMode) {
                             TableSetupColumn($"{column.name}\n{column.TypeName()}\n{column.offset}", ImGuiTableColumnFlags.NoResize, column.Size() * 21 - 7);
                         } else {
                             TableSetupColumn($"{column.name}\n{column.TypeName()}\n{column.offset}");
@@ -231,16 +218,16 @@ namespace ImGui.NET.SampleProgram {
                 TableSetColumnIndex(0);
                 TableHeader("Row");
 
-                for (int i = 0; i < dat.cols.Count; i++) {
+                for (int i = 0; i < tab.cols.Count; i++) {
                     TableSetColumnIndex(i + 1);
                     string columnName = TableGetColumnName(i + 1);
                     PushID(i);
-                    var column = dat.cols[i];
+                    var column = tab.cols[i];
 
                     if (column.column.type != Schema.Column.Type.Byte)
                         Checkbox("##byte", ref column.byteMode);
 
-                    bool error = column.analysis.GetError(column.column) != DatAnalysis.Error.NONE;
+                    bool error = column.error != DatAnalysis.Error.NONE;
                     if (error) PushStyleColor(ImGuiCol.TableHeaderBg, GetColorU32(new System.Numerics.Vector4(1, 0, 0, 0.2f)));
                     TableHeader(columnName);
                     if (error) PopStyleColor();
@@ -248,7 +235,7 @@ namespace ImGui.NET.SampleProgram {
                 }
                 //TableHeadersRow();
                 var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
-                clipper.Begin(dat.dat.rowCount);
+                clipper.Begin(tab.dat.rowCount);
                 if (selectRow != -1 && selectDat == null) {
                     clipper.IncludeItemByIndex(selectRow);
                 }
@@ -261,27 +248,27 @@ namespace ImGui.NET.SampleProgram {
 
                         TableNextRow();
                         TableSetColumnIndex(0);
-                        if (dat.selectedRow == row) TableSetBgColor(ImGuiTableBgTarget.RowBg0, GetColorU32(new System.Numerics.Vector4(0.3f, 0.5f, 1, 0.3f)));
+                        if (tab.selectedRow == row) TableSetBgColor(ImGuiTableBgTarget.RowBg0, GetColorU32(new System.Numerics.Vector4(0.3f, 0.5f, 1, 0.3f)));
                         Text(row.ToString()); //TODO garbagio
-                        for (int col = 0; col < dat.cols.Count; col++) {
+                        for (int col = 0; col < tab.cols.Count; col++) {
                             TableSetColumnIndex(col + 1);
 
-                            var column = dat.cols[col];
+                            var column = tab.cols[col];
 
                             if (column.column.type == Schema.Column.Type.rid)
                                 TableSetBgColor(ImGuiTableBgTarget.CellBg, GetColorU32(new System.Numerics.Vector4(0, 1, 0, 0.1f)));
                             if (column.column.type == Schema.Column.Type.Byte || column.byteMode) {
-                                ReadOnlySpan<char> text = dat.rowBytes[row].AsSpan().Slice(column.column.offset * 3, column.column.Size() * 3 - 1);
+                                ReadOnlySpan<char> text = tab.rowBytes[row].AsSpan().Slice(column.column.offset * 3, column.column.Size() * 3 - 1);
                                 bool isZero = true;
                                 for (int i = 0; i < column.column.Size(); i++)
-                                    if (dat.dat.Row(row)[column.column.offset + i] != 0)
+                                    if (tab.dat.Row(row)[column.column.offset + i] != 0)
                                         isZero = false;
-                                PushID(row * dat.cols.Count + col);
+                                PushID(row * tab.cols.Count + col);
                                 if (isZero) PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1));
-                                if (Selectable(text, dat.selectedColumn == col && dat.selectedRow == row)) {
-                                    dat.selectedColumn = col;
-                                    dat.selectedRow = row;
-                                    dat.Analyse(row, column.column.offset);
+                                if (Selectable(text, tab.selectedColumn == col && tab.selectedRow == row)) {
+                                    tab.SelectColumn(col, maxRows);
+                                    tab.selectedRow = row;
+                                    tab.Analyse(row, column.column.offset);
                                 }
                                 if (isZero) PopStyleColor();
                                 PopID();
@@ -289,26 +276,24 @@ namespace ImGui.NET.SampleProgram {
                                 string text = column.values[row];
                                 bool isZero = text == "0" || text == "False";
 
-                                PushID(row * dat.cols.Count + col);
+                                PushID(row * tab.cols.Count + col);
                                 if (isZero) PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.5f, 0.5f, 0.5f, 1));
-                                if (Selectable(text, dat.selectedColumn == col && dat.selectedRow == row, ImGuiSelectableFlags.AllowDoubleClick)) {
+                                if (Selectable(text, tab.selectedColumn == col && tab.selectedRow == row, ImGuiSelectableFlags.AllowDoubleClick)) {
                                     if (IsMouseDoubleClicked(0)) {
                                         if (column.column.type == Schema.Column.Type.rid && column.column.references != null) {
                                             selectDat = column.column.references;
                                             if(column.column.array) {
-                                                if(dat.inspectorRefArrayValues.Count > 0) {
-                                                    selectRow = dat.inspectorRefArrayValues[0];
+                                                if(tab.inspectorRefArrayValues.Count > 0) {
+                                                    selectRow = tab.inspectorRefArrayValues[0];
                                                 }
                                             } else {
-                                                selectRow = dat.inspectorRefValue;
+                                                selectRow = tab.inspectorRefValue;
                                             }
-
-
                                         }
                                     } else {
-                                        dat.selectedColumn = col;
-                                        dat.selectedRow = row;
-                                        dat.Analyse(row, column.column.offset);
+                                        tab.SelectColumn(col, maxRows);
+                                        tab.selectedRow = row;
+                                        tab.Analyse(row, column.column.offset);
                                     }
                                 }
                                 if (isZero) PopStyleColor();
@@ -320,18 +305,17 @@ namespace ImGui.NET.SampleProgram {
 
                 clipper.End();
                 EndTable();
-
             }
         }
 
 
-        unsafe void DatInspector(DatTab dat) {
+        unsafe void DatInspector(DatTab tab) {
             
-            if (dat.schemaText != null) {
-                InputTextMultiline("", ref dat.schemaText, 65535, new System.Numerics.Vector2(512, 768));
+            if (tab.schemaText != null) {
+                InputTextMultiline("", ref tab.schemaText, 65535, new System.Numerics.Vector2(512, 768));
 
                 if (Button("Parse")) {
-                    UpdateSchema(dat.schemaText);
+                    UpdateSchema(tab.schemaText);
                 }
                 SameLine();
                 if (Button("Reset")) {
@@ -340,29 +324,29 @@ namespace ImGui.NET.SampleProgram {
                     //dat.schemaText = schemaText[fileTitleCase];
                 }
             }
-            if (dat.selectedColumn != -1) {
+            if (tab.selectedColumn != -1) {
                 //INSPECTOR
-                DatAnalysis tempAnalysis = dat.cols[dat.selectedColumn].analysis;
+                
                 Text("Inspector");
                 if (BeginTable("Inspector", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit)) {
-                    InspectorRow("Ref Array", dat.inspectorRefArray, tempAnalysis.isRefArray, Schema.Column.Type.rid, true);
-                    InspectorRow("String Array", dat.inspectorStringArray, tempAnalysis.isStringArray, Schema.Column.Type.@string, true);
-                    InspectorRow("Float Array", dat.inspectorFloatArray, tempAnalysis.isFloatArray, Schema.Column.Type.f32, true);
-                    InspectorRow("Int Array", dat.inspectorIntArray, tempAnalysis.isIntArray, Schema.Column.Type.i32, true);
-                    InspectorRow("Unknown Array", dat.inspectorUnkArray, tempAnalysis.isArray, Schema.Column.Type._, true);
-                    InspectorRow("Reference", dat.inspectorRef, tempAnalysis.isRef, Schema.Column.Type.rid);
-                    InspectorRow("String", dat.inspectorString, tempAnalysis.isString, Schema.Column.Type.@string);
-                    InspectorRow("Float", dat.inspectorFloat, tempAnalysis.isFloat, Schema.Column.Type.f32);
-                    InspectorRow("Bool", dat.inspectorBool, tempAnalysis.isBool, Schema.Column.Type.@bool);
-                    InspectorRow("Int", dat.inspectorInt, tempAnalysis.isInt, Schema.Column.Type.i32);
+                    InspectorRow("Ref Array", tab.inspectorRefArray, tab.selectedColumnAnalysis.isRefArray, Schema.Column.Type.rid, true);
+                    InspectorRow("String Array", tab.inspectorStringArray, tab.selectedColumnAnalysis.isStringArray, Schema.Column.Type.@string, true);
+                    InspectorRow("Float Array", tab.inspectorFloatArray, tab.selectedColumnAnalysis.isFloatArray, Schema.Column.Type.f32, true);
+                    InspectorRow("Int Array", tab.inspectorIntArray, tab.selectedColumnAnalysis.isIntArray, Schema.Column.Type.i32, true);
+                    InspectorRow("Unknown Array", tab.inspectorUnkArray, tab.selectedColumnAnalysis.isArray, Schema.Column.Type._, true);
+                    InspectorRow("Reference", tab.inspectorRef, tab.selectedColumnAnalysis.isRef, Schema.Column.Type.rid);
+                    InspectorRow("String", tab.inspectorString, tab.selectedColumnAnalysis.isString, Schema.Column.Type.@string);
+                    InspectorRow("Float", tab.inspectorFloat, tab.selectedColumnAnalysis.isFloat, Schema.Column.Type.f32);
+                    InspectorRow("Bool", tab.inspectorBool, tab.selectedColumnAnalysis.isBool, Schema.Column.Type.@bool);
+                    InspectorRow("Int", tab.inspectorInt, tab.selectedColumnAnalysis.isInt, Schema.Column.Type.i32);
                     EndTable();
                 }
 
-                bool showRefValues = tempAnalysis.isRef == DatAnalysis.Error.NONE && dat.inspectorRefValue >= 0;
-                bool showRefArrayValues = tempAnalysis.isRefArray == DatAnalysis.Error.NONE && dat.inspectorRefArrayValues != null && dat.inspectorRefArrayValues.Count > 0;
+                bool showRefValues = tab.selectedColumnAnalysis.isRef == DatAnalysis.Error.NONE && tab.inspectorRefValue >= 0;
+                bool showRefArrayValues = tab.selectedColumnAnalysis.isRefArray == DatAnalysis.Error.NONE && tab.inspectorRefArrayValues != null && tab.inspectorRefArrayValues.Count > 0;
                 if (showRefValues || showRefArrayValues) {
 
-                    bool core = dat.table.file == "_Core";
+                    bool core = tab.table.file == "_Core";
 
                     Text("Possible Refs");
                     SameLine();
@@ -390,7 +374,7 @@ namespace ImGui.NET.SampleProgram {
                     //TODO shouldn't be building these strings every frame lol
                     if (BeginTable("Array Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                         for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
-                            if (datRowCount[i] > tempAnalysis.maxRefArray) {
+                            if (datRowCount[i] > tab.selectedColumnAnalysis.maxRefArray) {
                                 string tableName = datFileListSortedByRowCount[i];
                                 if (possibleRefFilter.Length > 0 && !tableName.Contains(possibleRefFilter)) continue;
 
@@ -398,18 +382,18 @@ namespace ImGui.NET.SampleProgram {
                                     tableName = table.name;
                                     if (possibleRefMode == 4) continue;
                                     bool core = table.file == "_Core";
-                                    bool sibling = table.file == dat.table.file;
+                                    bool sibling = table.file == tab.table.file;
                                     if (possibleRefMode == 1 && !sibling) continue;
                                     if (possibleRefMode == 2 && !core) continue;
                                     if (possibleRefMode == 3 && !sibling && !core) continue;
                                 }
 
                                 StringBuilder s = new StringBuilder("[");
-                                for (int row = 0; row < dat.inspectorRefArrayValues.Count; row++) {
+                                for (int row = 0; row < tab.inspectorRefArrayValues.Count; row++) {
                                     if (rowIds.ContainsKey(tableName))
-                                        s.Append(rowIds[tableName][dat.inspectorRefArrayValues[row]]);
+                                        s.Append(rowIds[tableName][tab.inspectorRefArrayValues[row]]);
                                     else
-                                        s.Append(dat.inspectorRefArrayValues[row].ToString());
+                                        s.Append(tab.inspectorRefArrayValues[row].ToString());
                                     s.Append(", ");
                                 }
                                 if (s.Length > 1) s.Remove(s.Length - 2, 2); s.Append(']');
@@ -434,7 +418,7 @@ namespace ImGui.NET.SampleProgram {
                 if (showRefValues) {
                     if (BeginTable("Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                         for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
-                            if (datRowCount[i] > tempAnalysis.maxRef) {
+                            if (datRowCount[i] > tab.selectedColumnAnalysis.maxRef) {
                                 string tableName = datFileListSortedByRowCount[i];
                                 if (possibleRefFilter.Length > 0 && !tableName.Contains(possibleRefFilter)) continue;
 
@@ -442,13 +426,13 @@ namespace ImGui.NET.SampleProgram {
                                     tableName = table.name;
                                     if (possibleRefMode == 4) continue;
                                     bool core = table.file == "_Core";
-                                    bool sibling = table.file == dat.table.file;
+                                    bool sibling = table.file == tab.table.file;
                                     if (possibleRefMode == 1 && !sibling) continue;
                                     if (possibleRefMode == 2 && !core) continue;
                                     if (possibleRefMode == 3 && !sibling && !core) continue;
                                 }
 
-                                string s = rowIds.ContainsKey(tableName) ? rowIds[tableName][dat.inspectorRefValue] : dat.inspectorRefValue.ToString();
+                                string s = rowIds.ContainsKey(tableName) ? rowIds[tableName][tab.inspectorRefValue] : tab.inspectorRefValue.ToString();
 
                                 if (possibleRefValueFilter.Length > 0 && !s.ToLower().Contains(possibleRefValueFilter)) continue;
                                 TableNextRow();
@@ -486,38 +470,38 @@ namespace ImGui.NET.SampleProgram {
         }
 
         void AddColumn(Schema.Column.Type type, bool array) {
-            DatTab dat = dats[datFileSelected];
-            var column = dat.cols[dat.selectedColumn];
-            var oldAnalysis = column.analysis;
+            DatTab tab = tabs[selectedTab];
+            var column = tab.cols[tab.selectedColumn];
+            var oldError = column.error;
             int offset = column.column.offset;
 
             var newColumn = new Schema.Column("_", type, offset, array);
             int newColumnEnd = offset + newColumn.Size();
-            for(int i = dat.cols.Count - 1; i >= dat.selectedColumn; i--) {
-                if (dat.cols[i].column.offset < newColumnEnd) {
-                    dat.cols.RemoveAt(i);
+            for(int i = tab.cols.Count - 1; i >= tab.selectedColumn; i--) {
+                if (tab.cols[i].column.offset < newColumnEnd) {
+                    tab.cols.RemoveAt(i);
                 }
             }
-            dat.cols.Insert(dat.selectedColumn, new DatTab.TableColumn() {
+            tab.cols.Insert(tab.selectedColumn, new DatTab.TableColumn() {
                 column = newColumn,
-                values = dat.dat.Column(newColumn, rowIds),
-                analysis = oldAnalysis,
+                values = tab.dat.Column(newColumn, rowIds),
+                error = DatAnalysis.AnalyseColumn(tab.dat, newColumn, maxRows),
                 byteMode = false
             });
-            if(dat.cols.Count > dat.selectedColumn + 1) {
-                int nextOffset = dat.cols[dat.selectedColumn + 1].column.offset;
+            if(tab.cols.Count > tab.selectedColumn + 1) {
+                int nextOffset = tab.cols[tab.selectedColumn + 1].column.offset;
                 for(int i = newColumnEnd; i < nextOffset; i++) {
-                    dat.cols.Insert(dat.selectedColumn + 1, new DatTab.TableColumn() {
+                    tab.cols.Insert(tab.selectedColumn + 1, new DatTab.TableColumn() {
                         column = new Schema.Column(i),
                         values = null,
-                        analysis = new DatAnalysis(dat.dat, i, maxRows)
+                        error = DatAnalysis.Error.NONE
                     });
                 }
             }
 
-            Schema.Column[] newColumns = new Schema.Column[dat.cols.Count];
-            for (int i = 0; i < dat.cols.Count; i++) newColumns[i] = dat.cols[i].column;
-            dat.schemaText = dat.table.ToGQL(newColumns);
+            Schema.Column[] newColumns = new Schema.Column[tab.cols.Count];
+            for (int i = 0; i < tab.cols.Count; i++) newColumns[i] = tab.cols[i].column;
+            tab.schemaText = tab.table.ToGQL(newColumns);
         }
     }
 }

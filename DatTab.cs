@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using static PoeFormats.Schema;
 
 namespace ImGui.NET.SampleProgram {
     public class DatTab {
@@ -12,6 +13,7 @@ namespace ImGui.NET.SampleProgram {
 
         public int selectedRow;
         public int selectedColumn;
+        public DatAnalysis selectedColumnAnalysis;
 
         public Schema.Table table;
         public List<TableColumn> cols;
@@ -36,15 +38,23 @@ namespace ImGui.NET.SampleProgram {
 
         int maxRows;
 
+
         public class TableColumn {
             public Schema.Column column;
-            public DatAnalysis analysis;
+            public DatAnalysis.Error error;
             public string[] values;
             public bool byteMode;
         }
 
         public override string ToString() {
             return table.name;
+        }
+
+        public void SelectColumn(int col, int maxRows) {
+            if (selectedColumn == col) return;
+            selectedColumn = col;
+            if (col < 0) selectedColumnAnalysis = null;
+            else selectedColumnAnalysis = new DatAnalysis(dat, cols[col].column.offset, maxRows);
         }
 
         public DatTab(string datPath, Schema.Table table, Dictionary<string, string[]> rowIds, int maxRows) {
@@ -64,7 +74,7 @@ namespace ImGui.NET.SampleProgram {
                     cols.Add(new TableColumn() {
                         column = column,
                         values = dat.Column(column, rowIds),
-                        analysis = new DatAnalysis(dat, column.offset, maxRows)
+                        error = DatAnalysis.AnalyseColumn(dat, column, maxRows)
                     });
                     columnIndex++;
                     byteIndex += column.Size();
@@ -73,7 +83,7 @@ namespace ImGui.NET.SampleProgram {
                     cols.Add(new TableColumn() {
                         column = new Schema.Column(byteIndex),
                         values = null,
-                        analysis = new DatAnalysis(dat, byteIndex, maxRows)
+                        error = DatAnalysis.Error.NONE
                     });
                     byteIndex++;
                 }
