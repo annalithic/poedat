@@ -8,10 +8,11 @@ using System.Collections.Generic;
 
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
-
         string startupDat = "acts";
 
-        string datFolder = @"E:\Extracted\PathOfExile\3.25.Settlers\data";
+        string datFolder = @"E:\Extracted\PathOfExile\3.25.SettlersPreorder\data";
+        //string datFolder = @"F:\Extracted\PathOfExile\3.25.2\data";
+
         string failText = null;
 
         Schema schema;
@@ -29,7 +30,7 @@ namespace ImGui.NET.SampleProgram {
         Dictionary<string, string[]> rowIds;
         int maxRows = 0;
 
-
+        int fileListMode = 0;
         int possibleRefMode = 0;
 
         string possibleRefFilter = "";
@@ -111,7 +112,7 @@ namespace ImGui.NET.SampleProgram {
         }
 
 
-        public unsafe void Update() {
+        public unsafe void Update(float width, float height) {
             if (BeginTable("MAIN", 3)) {
 
                 TableSetupColumn("Dat Files", ImGuiTableColumnFlags.WidthFixed, 256);
@@ -138,25 +139,78 @@ namespace ImGui.NET.SampleProgram {
 
 
                 //DAT FILES
+                float enumHeight = height - 64;
                 TableSetColumnIndex(0);
-                bool a = true;
-                if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, 1024))) {
-                    for (int i = 0; i < datFileList.Count; i++) { 
+
+                RadioButton("All", ref fileListMode, 0); SameLine();
+                RadioButton("Tables", ref fileListMode, 1); SameLine();
+                RadioButton("Enums", ref fileListMode, 2); SameLine();
+                RadioButton("Undefined", ref fileListMode, 3);
+
+
+                if (BeginChild("TABLE LIST CHILD", new System.Numerics.Vector2(256, height - 64))) {
+                //if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, height - 64))) {
+
+                    for (int i = 0; i < datFileList.Count; i++) {
+                        string name = datFileList[i];
+                        string tooltip = name + "\r\nnot defined";
+                        bool isEnum = schema.TryGetEnum(datFileList[i], out var e);
+
+                        if (schema.TryGetTable(datFileList[i], out var t)) {
+                            if (fileListMode > 1) continue;
+                            name = t.name;
+                        } else if (isEnum) {
+                            if (fileListMode % 2 == 1) continue;
+                            name = e.name;
+                        } else {
+                            if(fileListMode == 1 || fileListMode == 2) continue;
+                        }
+
                         bool isSelected = this.selectedTab == i;
-                       
-                        if (Selectable(datFileList[i], isSelected)) {
-                            if(this.selectedTab != i) {
+
+                        if (isEnum) {
+                            CalcTextSize(name);
+                            PushStyleColor(ImGuiCol.FrameBg, GetColorU32(new System.Numerics.Vector4(1, 0, 1, 0.2f)));
+                        }
+                        if (Selectable(name, isSelected)) {
+                            if (this.selectedTab != i) {
                                 SelectDat(i);
                                 selectedTab = true;
                             }
+                            SetItemTooltip(tooltip);
                         }
+                        if (isEnum) PopStyleColor();
                     }
-                    EndListBox();
+                    //EndListBox();
+                    EndChild();
                 }
+                //    EndChild();
+                //    enumHeight -= GetItemRectMax().Y;
+                //}
+                //Text("Enums:");
+                //if (BeginListBox("##ENUMLIST", new System.Numerics.Vector2(256, enumHeight))) {
+                //    for (int i = 0; i < datFileList.Count; i++) {
+
+                //        if (schema.TryGetEnum(datFileList[i], out var e)) {
+                //            bool isSelected = this.selectedTab == i;
+
+                //            if (Selectable(e.name, isSelected)) {
+                //                if (this.selectedTab != i) {
+                //                    SelectDat(i);
+                //                    selectedTab = true;
+                //                }
+                //            }
+                //        }
+
+                //    }
+                //    EndListBox();
+                //}
 
                 TableSetColumnIndex(1);
                 if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable)) {
                     for (int i = 0; i < datFileList.Count; i++) {
+                        string name = datFileList[i];
+
                         var dat = tabs[i];
                         if (dat == null) continue;
 
@@ -178,7 +232,7 @@ namespace ImGui.NET.SampleProgram {
                     EndTabBar();
                 }
 
-                if(this.selectedTab >= 0 && tabs[this.selectedTab] != null) {
+                if (this.selectedTab >= 0 && tabs[this.selectedTab] != null) {
                     //DATA
                     TableSetColumnIndex(1);
                     if (failText == null) {
@@ -338,6 +392,7 @@ namespace ImGui.NET.SampleProgram {
                     InspectorRow("String", tab.inspectorString, tab.selectedColumnAnalysis.isString, Schema.Column.Type.@string);
                     InspectorRow("Float", tab.inspectorFloat, tab.selectedColumnAnalysis.isFloat, Schema.Column.Type.f32);
                     InspectorRow("Bool", tab.inspectorBool, tab.selectedColumnAnalysis.isBool, Schema.Column.Type.@bool);
+                    InspectorRow("Hash16", tab.inspectorShort, tab.selectedColumnAnalysis.isHash16, Schema.Column.Type.i16);
                     InspectorRow("Int", tab.inspectorInt, tab.selectedColumnAnalysis.isInt, Schema.Column.Type.i32);
                     EndTable();
                 }

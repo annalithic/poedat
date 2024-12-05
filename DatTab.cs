@@ -27,6 +27,7 @@ namespace ImGui.NET.SampleProgram {
         public string inspectorFloat;
         public string inspectorString;
         public string inspectorRef;
+        public string inspectorShort;
         public int inspectorRefValue;
 
         public string inspectorIntArray;
@@ -101,6 +102,7 @@ namespace ImGui.NET.SampleProgram {
             inspectorFloat = null;
             inspectorRef = null;
             inspectorString = null;
+            inspectorShort = null;
             inspectorIntArray = null;
             inspectorFloatArray = null;
             inspectorStringArray = null;
@@ -172,6 +174,12 @@ namespace ImGui.NET.SampleProgram {
 
             }
 
+            if (distToEnd < 2)
+                inspectorShort = "OOB";
+            else {
+                ushort shortValue = BitConverter.ToUInt16(data, offset);
+                inspectorShort = shortValue.ToString();
+            }
 
             if (distToEnd < 4) {
                 inspectorInt = "OOB";

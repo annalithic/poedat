@@ -22,6 +22,7 @@ namespace ImGuiNET
         private static ImGuiController _controller;
         // private static MemoryEditor _memoryEditor;
 
+
         // UI state
         private static float _f = 0.0f;
         private static int _counter = 0;
@@ -100,7 +101,7 @@ namespace ImGuiNET
                 igSetNextWindowPos(viewport->Pos, ImGuiCond.Always, Vector2.Zero);
                 igSetNextWindowSize(viewport->Size, ImGuiCond.Always);
                 ImGui.Begin("DAT", ref showDatWindow, flags);
-                datWindow.Update();
+                datWindow.Update(viewport->Size.X, viewport->Size.Y);
                 ImGui.End();
             }
 
@@ -137,13 +138,12 @@ namespace ImGuiNET
 
 
             // 3. Show the ImGui demo window. Most of the sample code is in ImGui.ShowDemoWindow(). Read its code to learn more about Dear ImGui!
-            //if (_showImGuiDemoWindow)
-            //{
-            //    // Normally user code doesn't need/want to call this because positions are saved in .ini file anyway.
-            //    // Here we just want to make the demo initial state a bit more friendly!
-            //    ImGui.SetNextWindowPos(new Vector2(650, 20), ImGuiCond.FirstUseEver);
-            //    ImGui.ShowDemoWindow(ref _showImGuiDemoWindow);
-            //}
+            if (_showImGuiDemoWindow) {
+                // Normally user code doesn't need/want to call this because positions are saved in .ini file anyway.
+                // Here we just want to make the demo initial state a bit more friendly!
+                ImGui.SetNextWindowPos(new Vector2(650, 20), ImGuiCond.FirstUseEver);
+                ImGui.ShowDemoWindow(ref _showImGuiDemoWindow);
+            }
 
             //if (ImGui.TreeNode("Tabs"))
             //{
