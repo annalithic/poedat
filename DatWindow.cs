@@ -11,6 +11,7 @@ namespace ImGui.NET.SampleProgram {
         string startupDat = "acts";
 
         string datFolder = @"E:\Extracted\PathOfExile\3.25.SettlersPreorder\data";
+        string schemaFolder;
         //string datFolder = @"F:\Extracted\PathOfExile\3.25.2\data";
 
         string failText = null;
@@ -27,11 +28,30 @@ namespace ImGui.NET.SampleProgram {
 
 
         //dat analaysis
+        struct DatMetadata {
+            public int rowCount;
+            public int rowWidth;
+            public string[] rowIds;
+            
+            public enum State {
+                Undefined,
+                ExtraData,
+                Errors,
+                Working
+            }
+
+            public State state;
+        }
+        Dictionary<string, DatMetadata> metadata;
+
+
         Dictionary<string, string[]> rowIds;
         int maxRows = 0;
 
         int fileListMode = 0;
         int possibleRefMode = 0;
+
+        string datFilter = "";
 
         string possibleRefFilter = "";
         string possibleRefValueFilter = "";
@@ -39,10 +59,12 @@ namespace ImGui.NET.SampleProgram {
         string selectDat;
         int selectRow = -1;
 
-        public DatWindow(string path) {
+        public DatWindow(string datFolder, string schemaFolder) {
+            this.datFolder = datFolder;
+            this.schemaFolder = schemaFolder;
             datFileList = new List<string>();
             datNameIndices = new Dictionary<string, int>();
-            foreach(string datPath in Directory.EnumerateFiles(datFolder, "*.dat64")) {
+            foreach(string datPath in Directory.EnumerateFiles(datFolder, "*.datc64")) {
                 string datName = Path.GetFileNameWithoutExtension(datPath);
                 datNameIndices[datName] = datFileList.Count;
                 datFileList.Add(datName);
@@ -51,29 +73,52 @@ namespace ImGui.NET.SampleProgram {
 
 
 
-            schema = new Schema(@"E:\Projects2\dat-schema\dat-schema");
+            schema = new Schema(schemaFolder);
 
             datRowCount = new int[datFileList.Count];
             datFileListSortedByRowCount = new string[datFileList.Count];
             rowIds = new Dictionary<string, string[]>();
+            metadata = new Dictionary<string, DatMetadata>();
             for (int i = 0; i < datFileList.Count; i++) {
                 
                 string datFile = datFileList[i];
                 datFileListSortedByRowCount[i] = datFile;
-                string datPath = Path.Combine(datFolder, datFile + ".dat64");
+                string datPath = Path.Combine(datFolder, datFile + ".datc64");
                 Dat d = new Dat(datPath);
                 datRowCount[i] = d.rowCount;
+
+
                 if (d.rowCount > maxRows) maxRows = d.rowCount;
 
-                if(schema.TryGetTable(datFile, out var table)) {
+                DatMetadata m = new DatMetadata { rowCount = d.rowCount, rowWidth = d.rowWidth, state = DatMetadata.State.Undefined };
+
+                if (schema.TryGetTable(datFile, out var table)) {
                     var columns = table.columns;
+
+                    int columnsEnd = columns.Length > 0 ? columns[columns.Length - 1].offset + columns[columns.Length - 1].Size() : 0;
+                    int distToEnd = d.rowWidth - columnsEnd;
+                    if (distToEnd > 0) {
+                        m.state = DatMetadata.State.ExtraData;
+                    } else if (distToEnd < 0) {
+                        m.state = DatMetadata.State.Errors;
+                    } else {
+                        m.state = DatMetadata.State.Working;
+                    }
+
+
+                    //TODO better id detection
                     if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
                         rowIds[table.name] = d.Column(columns[0]);
                     } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
                         rowIds[table.name] = d.Column(columns[1]);
                     }
 
+
+
+                } else {
+                    m.state = DatMetadata.State.Undefined;
                 }
+                metadata[datFile] = m;
             }
 
             Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
@@ -104,7 +149,7 @@ namespace ImGui.NET.SampleProgram {
 
         DatTab LoadDat(string filename) {
             if (schema.TryGetTable(filename, out var table)) {
-                string datPath = Path.Combine(datFolder, filename.ToLower() + ".dat64");
+                string datPath = Path.Combine(datFolder, filename.ToLower() + ".datc64");
                 DatTab tab = new DatTab(datPath, table, rowIds, maxRows);
                 return tab;
             }
@@ -142,36 +187,60 @@ namespace ImGui.NET.SampleProgram {
                 float enumHeight = height - 64;
                 TableSetColumnIndex(0);
 
-                RadioButton("All", ref fileListMode, 0); SameLine();
-                RadioButton("Tables", ref fileListMode, 1); SameLine();
-                RadioButton("Enums", ref fileListMode, 2); SameLine();
-                RadioButton("Undefined", ref fileListMode, 3);
+                //RadioButton("All", ref fileListMode, 0); SameLine();
+                //RadioButton("Tables", ref fileListMode, 1); SameLine();
+                //RadioButton("Enums", ref fileListMode, 2); SameLine();
+                //RadioButton("Undefined", ref fileListMode, 3);
 
+                InputText("Filter", ref datFilter, 256);
 
-                if (BeginChild("TABLE LIST CHILD", new System.Numerics.Vector2(256, height - 64))) {
-                //if (BeginListBox("##FILELIST", new System.Numerics.Vector2(256, height - 64))) {
+                if(BeginTable("DAT LIST TABLE", 1, ImGuiTableFlags.ScrollY, new System.Numerics.Vector2(256, height - 64))) {
+
+                    TableSetupColumn("file", ImGuiTableColumnFlags.WidthFixed, 256);
 
                     for (int i = 0; i < datFileList.Count; i++) {
                         string name = datFileList[i];
+                        bool isSelected = this.selectedTab == i;
+
+                        DatMetadata meta = metadata[name];
+
+                        if (datFilter.Length > 0 && !name.Contains(datFilter) && !isSelected) continue;
                         string tooltip = name + "\r\nnot defined";
                         bool isEnum = schema.TryGetEnum(datFileList[i], out var e);
 
                         if (schema.TryGetTable(datFileList[i], out var t)) {
-                            if (fileListMode > 1) continue;
+                            if (fileListMode > 1 && t.columns.Length != 0) continue;
                             name = t.name;
                         } else if (isEnum) {
                             if (fileListMode % 2 == 1) continue;
                             name = e.name;
                         } else {
-                            if(fileListMode == 1 || fileListMode == 2) continue;
+                            if (fileListMode == 1 || fileListMode == 2) continue;
                         }
 
-                        bool isSelected = this.selectedTab == i;
 
-                        if (isEnum) {
-                            CalcTextSize(name);
-                            PushStyleColor(ImGuiCol.FrameBg, GetColorU32(new System.Numerics.Vector4(1, 0, 1, 0.2f)));
-                        }
+
+
+
+
+
+                        var color = meta.state switch {
+                            DatMetadata.State.Undefined => GetColorU32(new System.Numerics.Vector4(1, 1, 1, 0.2f)),
+                            DatMetadata.State.ExtraData => GetColorU32(new System.Numerics.Vector4(1, 0.8f, 0.2f, 0.1f)),
+                            DatMetadata.State.Errors => GetColorU32(new System.Numerics.Vector4(1, 0, 0, 0.1f)),
+                            DatMetadata.State.Working => GetColorU32(new System.Numerics.Vector4(0, 0, 0, 0.2f)),
+                        };
+
+
+                        TableNextRow();
+                        TableSetColumnIndex(0);
+
+                        TableSetBgColor(ImGuiTableBgTarget.CellBg, color);
+
+                        //PushStyleColor(ImGuiCol.Header, color);
+                        //PushStyleColor(ImGuiCol.HeaderActive, color);
+                        //PushStyleColor(ImGuiCol.HeaderHovered, color);
+
                         if (Selectable(name, isSelected)) {
                             if (this.selectedTab != i) {
                                 SelectDat(i);
@@ -179,32 +248,13 @@ namespace ImGui.NET.SampleProgram {
                             }
                             SetItemTooltip(tooltip);
                         }
-                        if (isEnum) PopStyleColor();
+                        //PopStyleColor();
+                        //PopStyleColor();
+                        //PopStyleColor();
                     }
-                    //EndListBox();
-                    EndChild();
+                    EndTable();
                 }
-                //    EndChild();
-                //    enumHeight -= GetItemRectMax().Y;
-                //}
-                //Text("Enums:");
-                //if (BeginListBox("##ENUMLIST", new System.Numerics.Vector2(256, enumHeight))) {
-                //    for (int i = 0; i < datFileList.Count; i++) {
 
-                //        if (schema.TryGetEnum(datFileList[i], out var e)) {
-                //            bool isSelected = this.selectedTab == i;
-
-                //            if (Selectable(e.name, isSelected)) {
-                //                if (this.selectedTab != i) {
-                //                    SelectDat(i);
-                //                    selectedTab = true;
-                //                }
-                //            }
-                //        }
-
-                //    }
-                //    EndListBox();
-                //}
 
                 TableSetColumnIndex(1);
                 if (BeginTabBar("DAT TAB BAR", ImGuiTabBarFlags.Reorderable)) {
@@ -252,7 +302,7 @@ namespace ImGui.NET.SampleProgram {
 
         unsafe void DatTable(DatTab tab) {
             if (BeginTable(datFileList[selectedTab], tab.cols.Count + 1, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersV | ImGuiTableFlags.Resizable)) {
-                TableSetupScrollFreeze(tab.cols[0].column.name == "Id" ? 2 : 1, 1);
+                TableSetupScrollFreeze(tab.cols.Count > 0 && tab.cols[0].column.name == "Id" ? 2 : 1, 1);
 
                 TableSetupColumn("IDX");
                 for (int i = 0; i < tab.cols.Count; i++) {
@@ -392,7 +442,7 @@ namespace ImGui.NET.SampleProgram {
                     InspectorRow("String", tab.inspectorString, tab.selectedColumnAnalysis.isString, Schema.Column.Type.@string);
                     InspectorRow("Float", tab.inspectorFloat, tab.selectedColumnAnalysis.isFloat, Schema.Column.Type.f32);
                     InspectorRow("Bool", tab.inspectorBool, tab.selectedColumnAnalysis.isBool, Schema.Column.Type.@bool);
-                    InspectorRow("Hash16", tab.inspectorShort, tab.selectedColumnAnalysis.isHash16, Schema.Column.Type.i16);
+                    InspectorRow("Hash16", tab.inspectorShort, tab.selectedColumnAnalysis.isHash16, Schema.Column.Type.u16);
                     InspectorRow("Int", tab.inspectorInt, tab.selectedColumnAnalysis.isInt, Schema.Column.Type.i32);
                     EndTable();
                 }
