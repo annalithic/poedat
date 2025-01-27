@@ -28,7 +28,7 @@ namespace ImGui.NET.SampleProgram {
 
 
         //dat analaysis
-        struct DatMetadata {
+        class DatMetadata {
             public int rowCount;
             public int rowWidth;
             public string[] rowIds;
@@ -36,6 +36,7 @@ namespace ImGui.NET.SampleProgram {
             public enum State {
                 Undefined,
                 ExtraData,
+                MissingData,
                 Errors,
                 Working
             }
@@ -51,6 +52,7 @@ namespace ImGui.NET.SampleProgram {
         int fileListMode = 0;
         int possibleRefMode = 0;
 
+        bool hideZeroRowDats = true;
         string datFilter = "";
 
         string possibleRefFilter = "";
@@ -82,49 +84,93 @@ namespace ImGui.NET.SampleProgram {
             for (int i = 0; i < datFileList.Count; i++) {
                 
                 string datFile = datFileList[i];
-                datFileListSortedByRowCount[i] = datFile;
-                string datPath = Path.Combine(datFolder, datFile + ".datc64");
-                Dat d = new Dat(datPath);
-                datRowCount[i] = d.rowCount;
-
-
-                if (d.rowCount > maxRows) maxRows = d.rowCount;
-
-                DatMetadata m = new DatMetadata { rowCount = d.rowCount, rowWidth = d.rowWidth, state = DatMetadata.State.Undefined };
-
-                if (schema.TryGetTable(datFile, out var table)) {
-                    var columns = table.columns;
-
-                    int columnsEnd = columns.Length > 0 ? columns[columns.Length - 1].offset + columns[columns.Length - 1].Size() : 0;
-                    int distToEnd = d.rowWidth - columnsEnd;
-                    if (distToEnd > 0) {
-                        m.state = DatMetadata.State.ExtraData;
-                    } else if (distToEnd < 0) {
-                        m.state = DatMetadata.State.Errors;
-                    } else {
-                        m.state = DatMetadata.State.Working;
-                    }
-
-
-                    //TODO better id detection
-                    if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
-                        rowIds[table.name] = d.Column(columns[0]);
-                    } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
-                        rowIds[table.name] = d.Column(columns[1]);
-                    }
-
-
-
-                } else {
-                    m.state = DatMetadata.State.Undefined;
-                }
-                metadata[datFile] = m;
+                if (!metadata.ContainsKey(datFile)) BuildMetadata(i);
             }
 
             Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
 
             SelectDat(startupDat);
         }
+
+        void BuildMetadata(int i) {
+            string datFile = datFileList[i];
+            datFileListSortedByRowCount[i] = datFile;
+            string datPath = Path.Combine(datFolder, datFile + ".datc64");
+            Dat d = new Dat(datPath);
+            datRowCount[i] = d.rowCount;
+
+
+            if (d.rowCount > maxRows) maxRows = d.rowCount;
+
+            DatMetadata m = new DatMetadata { rowCount = d.rowCount, rowWidth = d.rowWidth, state = DatMetadata.State.Working };
+            metadata[datFile] = m;
+
+            if (schema.TryGetTable(datFile, out var table)) {
+
+                var columns = table.columns;
+
+                int columnsEnd = columns.Length > 0 ? columns[columns.Length - 1].offset + columns[columns.Length - 1].Size() : 0;
+                int distToEnd = d.rowWidth - columnsEnd;
+                if (distToEnd > 0) {
+                    m.state = DatMetadata.State.ExtraData;
+                } else if (distToEnd < 0) {
+                    m.state = DatMetadata.State.MissingData;
+                } else {
+                    m.state = DatMetadata.State.Working;
+                }
+
+
+                //TODO better id detection
+                if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
+                    rowIds[table.name] = d.Column(columns[0]);
+                } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
+                    rowIds[table.name] = d.Column(columns[1]);
+                }
+
+
+                for (int col = 0; col < columns.Length; col++) {
+                    var column = columns[col];
+                    if(column.offset + column.Size() > d.rowWidth) {
+                        m.state = DatMetadata.State.MissingData;
+                        break;
+                    }
+                    int maxRef = 100000;
+                    if (column.references != null) {
+                        string refTable = column.references.ToLower();
+
+                        if(refTable == datFile) {
+                            maxRef = m.rowCount;
+                        } else {
+                            if (!datNameIndices.ContainsKey(refTable)) {
+                                Console.WriteLine($"{refTable} MISSING!");
+                                continue;
+                            }
+                            int refIndex = datNameIndices[refTable];
+
+                            if (!metadata.ContainsKey(refTable)) {
+                                BuildMetadata(refIndex);
+                            }
+                            maxRef = metadata[refTable].rowCount - 1;
+                        }
+
+                    }
+                COULDNOTFINDDAT:
+                    //TODO analyse only for specific type????
+                    DatAnalysis.Error error = DatAnalysis.AnalyseColumn(d, column, maxRef);
+                    if (error != DatAnalysis.Error.NONE) {
+                        m.state = DatMetadata.State.Errors;
+                        break;
+                        //Console.WriteLine($"{datName} {column.TypeName()} AT {column.offset} {error}");
+                    }
+                }
+
+
+            } else {
+                m.state = DatMetadata.State.Undefined;
+            }
+
+        }
+        
 
         void UpdateSchema(string text) {
             Schema.GqlReader r = new Schema.GqlReader(" " + text + " "); //TODO tokeniser doesn't work if start or end are proper characters lol
@@ -193,8 +239,9 @@ namespace ImGui.NET.SampleProgram {
                 //RadioButton("Undefined", ref fileListMode, 3);
 
                 InputText("Filter", ref datFilter, 256);
+                //Separator();
 
-                if(BeginTable("DAT LIST TABLE", 1, ImGuiTableFlags.ScrollY, new System.Numerics.Vector2(256, height - 64))) {
+                if(BeginTable("DAT LIST TABLE", 1, ImGuiTableFlags.ScrollY, new System.Numerics.Vector2(256, height - 80))) {
 
                     TableSetupColumn("file", ImGuiTableColumnFlags.WidthFixed, 256);
 
@@ -203,6 +250,7 @@ namespace ImGui.NET.SampleProgram {
                         bool isSelected = this.selectedTab == i;
 
                         DatMetadata meta = metadata[name];
+                        if (hideZeroRowDats && meta.rowCount == 0) continue;
 
                         if (datFilter.Length > 0 && !name.Contains(datFilter) && !isSelected) continue;
                         string tooltip = name + "\r\nnot defined";
@@ -219,15 +267,11 @@ namespace ImGui.NET.SampleProgram {
                         }
 
 
-
-
-
-
-
                         var color = meta.state switch {
                             DatMetadata.State.Undefined => GetColorU32(new System.Numerics.Vector4(1, 1, 1, 0.2f)),
-                            DatMetadata.State.ExtraData => GetColorU32(new System.Numerics.Vector4(1, 0.8f, 0.2f, 0.1f)),
-                            DatMetadata.State.Errors => GetColorU32(new System.Numerics.Vector4(1, 0, 0, 0.1f)),
+                            DatMetadata.State.ExtraData => GetColorU32(new System.Numerics.Vector4(1, 0.8f, 0.2f, 0.2f)),
+                            DatMetadata.State.MissingData => GetColorU32(new System.Numerics.Vector4(0.1f, 0.6f, 1.0f, 0.2f)),
+                            DatMetadata.State.Errors => GetColorU32(new System.Numerics.Vector4(1, 0.1f, 0.1f, 0.2f)),
                             DatMetadata.State.Working => GetColorU32(new System.Numerics.Vector4(0, 0, 0, 0.2f)),
                         };
 
@@ -252,8 +296,10 @@ namespace ImGui.NET.SampleProgram {
                         //PopStyleColor();
                         //PopStyleColor();
                     }
+
                     EndTable();
                 }
+                Checkbox("Hide Empty", ref hideZeroRowDats);
 
 
                 TableSetColumnIndex(1);
@@ -603,9 +649,11 @@ namespace ImGui.NET.SampleProgram {
                     });
                 }
             }
+            int lastDefined = tab.cols.Count - 1;
+            while (lastDefined >= 0 && tab.cols[lastDefined].column.type == Schema.Column.Type.Byte) lastDefined--;
 
-            Schema.Column[] newColumns = new Schema.Column[tab.cols.Count];
-            for (int i = 0; i < tab.cols.Count; i++) newColumns[i] = tab.cols[i].column;
+            Schema.Column[] newColumns = new Schema.Column[lastDefined + 1];
+            for (int i = 0; i < newColumns.Length; i++) newColumns[i] = tab.cols[i].column;
             tab.schemaText = tab.table.ToGQL(newColumns);
         }
     }
