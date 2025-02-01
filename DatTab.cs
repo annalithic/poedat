@@ -58,7 +58,7 @@ namespace ImGui.NET.SampleProgram {
             else selectedColumnAnalysis = new DatAnalysis(dat, cols[col].column.offset, maxRows);
         }
 
-        public DatTab(string datPath, Schema.Table table, Dictionary<string, string[]> rowIds, int maxRows) {
+        public DatTab(string datPath, Schema.Table table, Dictionary<string, DatMetadata> metadata, int maxRows) {
             nameLower = table.name.ToLower();
             this.table = table;
             schemaText = table.ToGQL();
@@ -72,9 +72,10 @@ namespace ImGui.NET.SampleProgram {
             while (byteIndex < dat.rowWidth) {
                 if (columnIndex < table.columns.Length && table.columns[columnIndex].offset == byteIndex) {
                     var column = table.columns[columnIndex];
+                    var refIds = column.references != null && metadata.ContainsKey(column.references.ToLower()) ? metadata[column.references.ToLower()].rowIds : null;
                     cols.Add(new TableColumn() {
                         column = column,
-                        values = dat.Column(column, rowIds),
+                        values = dat.Column(column, refIds),
                         error = DatAnalysis.AnalyseColumn(dat, column, maxRows)
                     });
                     columnIndex++;

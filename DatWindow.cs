@@ -5,6 +5,7 @@ using static ImGuiNET.ImGui;
 using PoeFormats;
 using System.IO;
 using System.Collections.Generic;
+using System.Formats.Tar;
 
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
@@ -28,25 +29,8 @@ namespace ImGui.NET.SampleProgram {
 
 
         //dat analaysis
-        class DatMetadata {
-            public int rowCount;
-            public int rowWidth;
-            public string[] rowIds;
-            
-            public enum State {
-                Undefined,
-                ExtraData,
-                MissingData,
-                Errors,
-                Working
-            }
-
-            public State state;
-        }
         Dictionary<string, DatMetadata> metadata;
 
-
-        Dictionary<string, string[]> rowIds;
         int maxRows = 0;
 
         int fileListMode = 0;
@@ -79,12 +63,26 @@ namespace ImGui.NET.SampleProgram {
 
             datRowCount = new int[datFileList.Count];
             datFileListSortedByRowCount = new string[datFileList.Count];
-            rowIds = new Dictionary<string, string[]>();
             metadata = new Dictionary<string, DatMetadata>();
             for (int i = 0; i < datFileList.Count; i++) {
                 
                 string datFile = datFileList[i];
                 if (!metadata.ContainsKey(datFile)) BuildMetadata(i);
+            }
+
+            foreach(string dat in metadata.Keys) {
+                var meta = metadata[dat];
+                if(meta.rowIds == null && schema.TryGetTable(dat, out var table)) {
+                    for(int col = 0; col < table.columns.Length; col++) {
+                        var column = table.columns[col];
+                        if (column.type == Schema.Column.Type.rid && column.references != null && column.unique) {
+                            Console.WriteLine($"{dat} -> {column.references} {column}");
+                            string datPath = Path.Combine(datFolder, dat + ".datc64");
+                            Dat d = new Dat(datPath);
+                            meta.rowIds = d.Column(column, metadata[column.references.ToLower()].rowIds);
+                        }
+                    }
+                }
             }
 
             Array.Sort<int, string>(datRowCount, datFileListSortedByRowCount);
@@ -122,9 +120,9 @@ namespace ImGui.NET.SampleProgram {
 
                 //TODO better id detection
                 if (columns.Length != 0 && columns[0].type == Schema.Column.Type.@string) {
-                    rowIds[table.name] = d.Column(columns[0]);
+                    m.rowIds = d.Column(columns[0]);
                 } else if (columns.Length > 1 && columns[1].type == Schema.Column.Type.@string) {
-                    rowIds[table.name] = d.Column(columns[1]);
+                    m.rowIds = d.Column(columns[1]);
                 }
 
 
@@ -196,7 +194,7 @@ namespace ImGui.NET.SampleProgram {
         DatTab LoadDat(string filename) {
             if (schema.TryGetTable(filename, out var table)) {
                 string datPath = Path.Combine(datFolder, filename.ToLower() + ".datc64");
-                DatTab tab = new DatTab(datPath, table, rowIds, maxRows);
+                DatTab tab = new DatTab(datPath, table, metadata, maxRows);
                 return tab;
             }
             return null;
@@ -526,7 +524,7 @@ namespace ImGui.NET.SampleProgram {
                     if (BeginTable("Array Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                         for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
                             if (datRowCount[i] > tab.selectedColumnAnalysis.maxRefArray) {
-                                string tableName = datFileListSortedByRowCount[i];
+                                string tableName = datFileListSortedByRowCount[i]; string tableNameLower = tableName.ToLower();
                                 if (possibleRefFilter.Length > 0 && !tableName.Contains(possibleRefFilter)) continue;
 
                                 if(schema.TryGetTable(tableName, out var table)) {
@@ -541,8 +539,8 @@ namespace ImGui.NET.SampleProgram {
 
                                 StringBuilder s = new StringBuilder("[");
                                 for (int row = 0; row < tab.inspectorRefArrayValues.Count; row++) {
-                                    if (rowIds.ContainsKey(tableName))
-                                        s.Append(rowIds[tableName][tab.inspectorRefArrayValues[row]]);
+                                    if (metadata[tableNameLower].rowIds != null)
+                                        s.Append(metadata[tableNameLower].rowIds[tab.inspectorRefArrayValues[row]]);
                                     else
                                         s.Append(tab.inspectorRefArrayValues[row].ToString());
                                     s.Append(", ");
@@ -570,7 +568,7 @@ namespace ImGui.NET.SampleProgram {
                     if (BeginTable("Possible Refs", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchSame)) {
                         for (int i = 0; i < datFileListSortedByRowCount.Length; i++) {
                             if (datRowCount[i] > tab.selectedColumnAnalysis.maxRef) {
-                                string tableName = datFileListSortedByRowCount[i];
+                                string tableName = datFileListSortedByRowCount[i]; string tableNameLower = tableName.ToLower();
                                 if (possibleRefFilter.Length > 0 && !tableName.Contains(possibleRefFilter)) continue;
 
                                 if (schema.TryGetTable(tableName, out var table)) {
@@ -583,7 +581,7 @@ namespace ImGui.NET.SampleProgram {
                                     if (possibleRefMode == 3 && !sibling && !core) continue;
                                 }
 
-                                string s = rowIds.ContainsKey(tableName) ? rowIds[tableName][tab.inspectorRefValue] : tab.inspectorRefValue.ToString();
+                                string s = metadata[tableNameLower].rowIds != null ? metadata[tableNameLower].rowIds[tab.inspectorRefValue] : tab.inspectorRefValue.ToString();
 
                                 if (possibleRefValueFilter.Length > 0 && !s.ToLower().Contains(possibleRefValueFilter)) continue;
                                 TableNextRow();
@@ -635,7 +633,7 @@ namespace ImGui.NET.SampleProgram {
             }
             tab.cols.Insert(tab.selectedColumn, new DatTab.TableColumn() {
                 column = newColumn,
-                values = tab.dat.Column(newColumn, rowIds),
+                values = tab.dat.Column(newColumn, newColumn.references != null && metadata.ContainsKey(newColumn.references) ? metadata[newColumn.references].rowIds : null),
                 error = DatAnalysis.AnalyseColumn(tab.dat, newColumn, maxRows),
                 byteMode = false
             });
@@ -654,7 +652,7 @@ namespace ImGui.NET.SampleProgram {
 
             Schema.Column[] newColumns = new Schema.Column[lastDefined + 1];
             for (int i = 0; i < newColumns.Length; i++) newColumns[i] = tab.cols[i].column;
-            tab.schemaText = tab.table.ToGQL(newColumns);
+            tab.schemaText = tab.table.ToGQL(newColumns, false);
         }
     }
 }
