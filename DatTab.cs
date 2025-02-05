@@ -1,6 +1,7 @@
 ﻿using PoeFormats;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using static PoeFormats.Schema;
 
@@ -110,6 +111,26 @@ namespace ImGui.NET.SampleProgram {
             inspectorRefArray = null;
             inspectorUnkArray = null;
 
+        }
+
+        public void ToCsv(string path, char sep = '|') {
+            using (TextWriter w = new StreamWriter(File.Open(path, FileMode.Create))) {
+                w.Write(sep);
+                for (int col = 0; col < cols.Count; col++) {
+                    if (cols[col].values != null) {
+                        w.Write(cols[col].column.name); w.Write(sep);
+                    }
+                }
+                for (int row = 0; row < dat.rowCount; row++) {
+                    w.Write(row.ToString()); w.Write(sep);
+                    for(int col = 0; col < cols.Count; col++) {
+                        if (cols[col].values != null) {
+                            w.Write(cols[col].values[row]); w.Write(sep);
+                        }
+                    }
+                    w.WriteLine();
+                }
+            }
         }
 
         string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {

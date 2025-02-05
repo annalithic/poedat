@@ -471,6 +471,12 @@ namespace ImGui.NET.SampleProgram {
                     //string fileTitleCase = lowercaseToTitleCaseDats[datFileList[datFileSelected]];
                     //dat.schemaText = schemaText[fileTitleCase];
                 }
+                SameLine();
+                if(Button("Export CSV")) {
+                    string directory = @$"E:\Extracted\PathOfExile2\csv\{Path.GetFileName(Path.GetDirectoryName(datFolder))}\";
+                    if(!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                    tab.ToCsv(directory + tab.table.name + ".csv");
+                }
             }
             if (tab.selectedColumn != -1) {
                 //INSPECTOR
