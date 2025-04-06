@@ -113,6 +113,13 @@ namespace ImGui.NET.SampleProgram {
 
         }
 
+        public void ColumnToTxt(string path, int column) {
+            using (TextWriter w = new StreamWriter(File.Open(path, FileMode.Create))) {
+                for (int row = 0; row < dat.rowCount; row++) {
+                    w.WriteLine(cols[column].values[row]);
+                }            
+            }
+        }
         public void ToCsv(string path, char sep = '|') {
             using (TextWriter w = new StreamWriter(File.Open(path, FileMode.Create))) {
                 w.Write(sep);
@@ -121,6 +128,7 @@ namespace ImGui.NET.SampleProgram {
                         w.Write(cols[col].column.name); w.Write(sep);
                     }
                 }
+                w.WriteLine();
                 for (int row = 0; row < dat.rowCount; row++) {
                     w.Write(row.ToString()); w.Write(sep);
                     for(int col = 0; col < cols.Count; col++) {

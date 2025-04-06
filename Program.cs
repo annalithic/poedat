@@ -44,7 +44,7 @@ namespace ImGuiNET
         static void Main(string[] args)
         {
             //TEMP dat load
-            datWindow = new DatWindow(@"E:\Extracted\PathOfExile2\0.1.1c\data", @"E:\Projects\dat-schema\dat-schema");
+            datWindow = new DatWindow(@"E:\Extracted\PathOfExile2\0.2.Preload\data2", @"E:\Projects\dat-schema\dat-schema");
 
             // Create window, GraphicsDevice, and all resources necessary for the demo.
             VeldridStartup.CreateWindowAndGraphicsDevice(

@@ -9,7 +9,7 @@ using System.Formats.Tar;
 
 namespace ImGui.NET.SampleProgram {
     internal class DatWindow {
-        string startupDat = "acts";
+        string startupDat = "miscanimated";
 
         string datFolder = @"E:\Extracted\PathOfExile\3.25.SettlersPreorder\data";
         string schemaFolder;
@@ -476,6 +476,11 @@ namespace ImGui.NET.SampleProgram {
                     string directory = @$"E:\Extracted\PathOfExile2\csv\{Path.GetFileName(Path.GetDirectoryName(datFolder))}\";
                     if(!Directory.Exists(directory)) Directory.CreateDirectory(directory);
                     tab.ToCsv(directory + tab.table.name + ".csv");
+                }
+                if (Button("Export Column")) {
+                    string directory = @$"E:\Extracted\PathOfExile2\csv\{Path.GetFileName(Path.GetDirectoryName(datFolder))}\";
+                    if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                    tab.ColumnToTxt($"{directory}{tab.table.name}_{tab.selectedColumn}.txt", tab.selectedColumn);
                 }
             }
             if (tab.selectedColumn != -1) {
