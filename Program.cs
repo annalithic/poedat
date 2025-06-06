@@ -43,8 +43,10 @@ namespace ImGuiNET
 
         static void Main(string[] args)
         {
+            string folder = @"E:\Extracted\PathOfExile2\0.2.1\data";
+            if(args.Length > 0) folder = args[0];
             //TEMP dat load
-            datWindow = new DatWindow(@"E:\Extracted\PathOfExile2\0.2.Preload\data2", @"E:\Projects\dat-schema\dat-schema");
+            datWindow = new DatWindow(folder, @"E:\Projects\dat-schema\dat-schema");
 
             // Create window, GraphicsDevice, and all resources necessary for the demo.
             VeldridStartup.CreateWindowAndGraphicsDevice(

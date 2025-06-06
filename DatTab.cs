@@ -120,6 +120,7 @@ namespace ImGui.NET.SampleProgram {
                 }            
             }
         }
+
         public void ToCsv(string path, char sep = '|') {
             using (TextWriter w = new StreamWriter(File.Open(path, FileMode.Create))) {
                 w.Write(sep);
@@ -140,7 +141,6 @@ namespace ImGui.NET.SampleProgram {
                 }
             }
         }
-
         string ToHexSpaced(ReadOnlySpan<byte> b, int start = 0, int length = int.MaxValue) {
             if (start + length > b.Length) length = b.Length - start;
             if (b.Length <= start || length == 0) return "";
